@@ -1,0 +1,11 @@
+/.github
+/bin
+/node_modules
+/tests
+.distignore
+.gitignore
+composer.json
+composer.lock
+phpcs.xml.dist
+phpstan.neon
+phpunit.xml.dist

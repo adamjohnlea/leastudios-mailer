@@ -1,0 +1,53 @@
+.leastudios-mailer-tab-content .form-table th {
+	width: 200px;
+}
+
+.leastudios-mailer-test-email .widefat td {
+	padding: 10px 15px;
+}
+
+#leastudios-mailer-test-result {
+	padding: 12px 15px;
+	border-radius: 4px;
+	display: none;
+}
+
+#leastudios-mailer-test-result.success {
+	display: block;
+	background: #edfaef;
+	border-left: 4px solid #00a32a;
+	color: #1d2327;
+}
+
+#leastudios-mailer-test-result.error {
+	display: block;
+	background: #fcf0f1;
+	border-left: 4px solid #d63638;
+	color: #1d2327;
+}
+
+#leastudios-mailer-test-result.loading {
+	display: block;
+	background: #f0f6fc;
+	border-left: 4px solid #2271b1;
+	color: #1d2327;
+}
+
+#leastudios-mailer-health-result {
+	margin-top: 15px;
+}
+
+#leastudios-mailer-health-result .health-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 0;
+}
+
+#leastudios-mailer-health-result .health-pass {
+	color: #00a32a;
+}
+
+#leastudios-mailer-health-result .health-fail {
+	color: #d63638;
+}

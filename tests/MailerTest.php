@@ -1,0 +1,250 @@
+<?php
+/**
+ * Tests for Mailer.
+ *
+ * @package LEAStudios\Mailer\Tests
+ */
+
+declare(strict_types=1);
+
+namespace LEAStudios\Mailer\Tests;
+
+use LEAStudios\Mailer\Email\Mailer;
+use LEAStudios\Mailer\Log\Email_Logger;
+use LEAStudios\Mailer\SES\Client;
+use LEAStudios\Tests\TestCase;
+
+/**
+ * @covers \LEAStudios\Mailer\Email\Mailer
+ */
+class MailerTest extends TestCase {
+
+	private Client $ses_client;
+	private Email_Logger $logger;
+	private Mailer $mailer;
+
+	public function set_up(): void {
+		parent::set_up();
+
+		$this->ses_client = $this->createMock( Client::class );
+		$this->logger     = $this->createMock( Email_Logger::class );
+		$this->mailer     = new Mailer( $this->ses_client, $this->logger );
+	}
+
+	public function test_send_returns_null_when_disabled(): void {
+		update_option( 'leastudios_mailer_options', [ 'enabled' => false ] );
+
+		$result = $this->mailer->send(
+			null,
+			[
+				'to'      => 'test@example.com',
+				'subject' => 'Test',
+				'message' => 'Hello',
+				'headers' => [],
+			]
+		);
+
+		$this->assertNull( $result );
+	}
+
+	public function test_send_returns_null_when_no_options(): void {
+		delete_option( 'leastudios_mailer_options' );
+
+		$result = $this->mailer->send(
+			null,
+			[
+				'to'      => 'test@example.com',
+				'subject' => 'Test',
+				'message' => 'Hello',
+				'headers' => [],
+			]
+		);
+
+		$this->assertNull( $result );
+	}
+
+	public function test_send_calls_ses_client_when_enabled(): void {
+		update_option(
+			'leastudios_mailer_options',
+			[
+				'enabled'    => true,
+				'from_email' => 'sender@example.com',
+				'from_name'  => 'Test Sender',
+			]
+		);
+
+		$this->ses_client->expects( $this->once() )
+			->method( 'send_email' )
+			->willReturn(
+				[
+					'success'    => true,
+					'message_id' => 'test-msg-id',
+					'error'      => '',
+				]
+			);
+
+		$this->logger->expects( $this->once() )
+			->method( 'log' )
+			->with( 'test@example.com', 'Test Subject', 'sent', 'test-msg-id', '' );
+
+		$result = $this->mailer->send(
+			null,
+			[
+				'to'      => 'test@example.com',
+				'subject' => 'Test Subject',
+				'message' => 'Hello World',
+				'headers' => [],
+			]
+		);
+
+		$this->assertTrue( $result );
+	}
+
+	public function test_send_logs_failure(): void {
+		update_option(
+			'leastudios_mailer_options',
+			[
+				'enabled'    => true,
+				'from_email' => 'sender@example.com',
+			]
+		);
+
+		$this->ses_client->expects( $this->once() )
+			->method( 'send_email' )
+			->willReturn(
+				[
+					'success'    => false,
+					'message_id' => '',
+					'error'      => 'SES error',
+				]
+			);
+
+		$this->logger->expects( $this->once() )
+			->method( 'log' )
+			->with( 'test@example.com', 'Fail Test', 'failed', '', 'SES error' );
+
+		$result = $this->mailer->send(
+			null,
+			[
+				'to'      => 'test@example.com',
+				'subject' => 'Fail Test',
+				'message' => 'Hello',
+				'headers' => [],
+			]
+		);
+
+		$this->assertFalse( $result );
+	}
+
+	public function test_send_parses_string_headers(): void {
+		update_option(
+			'leastudios_mailer_options',
+			[
+				'enabled'    => true,
+				'from_email' => 'default@example.com',
+			]
+		);
+
+		$this->ses_client->expects( $this->once() )
+			->method( 'send_email' )
+			->with(
+				$this->stringContains( 'Custom Sender' ),  // from.
+				$this->equalTo( [ 'test@example.com' ] ),  // to.
+				$this->equalTo( 'Header Test' ),            // subject.
+				$this->equalTo( 'Hello' ),                  // body_html (Content-Type: text/html).
+				$this->equalTo( '' ),                       // body_text.
+				$this->equalTo( [ 'cc@example.com' ] ),     // cc.
+				$this->equalTo( [] ),                       // bcc.
+				$this->equalTo( [ 'reply@example.com' ] ),  // reply_to.
+			)
+			->willReturn(
+				[
+					'success'    => true,
+					'message_id' => 'msg-123',
+					'error'      => '',
+				]
+			);
+
+		$this->logger->method( 'log' );
+
+		$headers = "From: Custom Sender <custom@example.com>\r\nContent-Type: text/html\r\nCc: cc@example.com\r\nReply-To: reply@example.com";
+
+		$this->mailer->send(
+			null,
+			[
+				'to'      => 'test@example.com',
+				'subject' => 'Header Test',
+				'message' => 'Hello',
+				'headers' => $headers,
+			]
+		);
+	}
+
+	public function test_send_returns_null_when_intercept_filter_is_false(): void {
+		update_option(
+			'leastudios_mailer_options',
+			[
+				'enabled'    => true,
+				'from_email' => 'sender@example.com',
+			]
+		);
+
+		add_filter( 'leastudios_mailer_should_intercept', '__return_false' );
+
+		$this->ses_client->expects( $this->never() )->method( 'send_email' );
+
+		$result = $this->mailer->send(
+			null,
+			[
+				'to'      => 'test@example.com',
+				'subject' => 'Test',
+				'message' => 'Hello',
+				'headers' => [],
+			]
+		);
+
+		$this->assertNull( $result );
+	}
+
+	public function test_send_handles_array_to_recipients(): void {
+		update_option(
+			'leastudios_mailer_options',
+			[
+				'enabled'    => true,
+				'from_email' => 'sender@example.com',
+			]
+		);
+
+		$this->ses_client->expects( $this->once() )
+			->method( 'send_email' )
+			->with(
+				$this->anything(),
+				$this->equalTo( [ 'a@example.com', 'b@example.com' ] ),
+				$this->anything(),
+				$this->anything(),
+				$this->anything(),
+				$this->anything(),
+				$this->anything(),
+				$this->anything(),
+			)
+			->willReturn(
+				[
+					'success'    => true,
+					'message_id' => 'msg-456',
+					'error'      => '',
+				]
+			);
+
+		$this->logger->method( 'log' );
+
+		$this->mailer->send(
+			null,
+			[
+				'to'      => [ 'a@example.com', 'b@example.com' ],
+				'subject' => 'Multi',
+				'message' => 'Hello',
+				'headers' => [],
+			]
+		);
+	}
+}
