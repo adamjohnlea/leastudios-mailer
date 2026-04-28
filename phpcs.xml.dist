@@ -37,6 +37,23 @@
 
     <rule ref="PHPCompatibilityWP"/>
 
+    <!-- Relax docblock requirements in tests; test names are the documentation. -->
+    <rule ref="Squiz.Commenting.FunctionComment.Missing">
+        <exclude-pattern>tests/</exclude-pattern>
+    </rule>
+    <rule ref="Squiz.Commenting.ClassComment.Missing">
+        <exclude-pattern>tests/</exclude-pattern>
+    </rule>
+    <rule ref="Squiz.Commenting.VariableComment.Missing">
+        <exclude-pattern>tests/</exclude-pattern>
+    </rule>
+    <rule ref="Generic.Commenting.DocComment.MissingShort">
+        <exclude-pattern>tests/</exclude-pattern>
+    </rule>
+    <rule ref="WordPress.Security.EscapeOutput.OutputNotEscaped">
+        <exclude-pattern>tests/</exclude-pattern>
+    </rule>
+
     <arg value="sp"/>
     <arg name="colors"/>
     <arg name="extensions" value="php"/>

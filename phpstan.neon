@@ -2,10 +2,5 @@ parameters:
     level: 6
     paths:
         - src
-    excludePaths:
-        - vendor
-        - node_modules
-        - build
-        - dist
     scanDirectories:
         - vendor/php-stubs/wordpress-stubs
