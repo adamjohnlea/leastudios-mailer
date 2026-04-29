@@ -23,7 +23,7 @@ delete_option( 'leastudios_mailer_schema_version' );
 LEAStudios\Mailer\Database\Migration::drop_tables();
 
 // Clear any scheduled cron events.
-$timestamp = wp_next_scheduled( 'leastudios_mailer_cleanup_logs' );
-if ( $timestamp ) {
-	wp_unschedule_event( $timestamp, 'leastudios_mailer_cleanup_logs' );
+$leastudios_mailer_cron_timestamp = wp_next_scheduled( 'leastudios_mailer_cleanup_logs' );
+if ( $leastudios_mailer_cron_timestamp ) {
+	wp_unschedule_event( $leastudios_mailer_cron_timestamp, 'leastudios_mailer_cleanup_logs' );
 }

@@ -28,9 +28,21 @@ define( 'LEASTUDIOS_MAILER_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LEASTUDIOS_MAILER_URL', plugin_dir_url( __FILE__ ) );
 
 // Autoloader.
-if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
-	require_once __DIR__ . '/vendor/autoload.php';
+if ( ! file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
+	add_action(
+		'admin_notices',
+		function () {
+			printf(
+				'<div class="notice notice-error"><p><strong>%s</strong>: %s</p></div>',
+				esc_html__( 'leaStudios Mailer', 'leastudios-mailer' ),
+				esc_html__( 'Plugin dependencies are missing. Run "composer install" in the plugin directory.', 'leastudios-mailer' )
+			);
+		}
+	);
+	return;
 }
+
+require_once __DIR__ . '/vendor/autoload.php';
 
 /**
  * Initialize the plugin.
