@@ -614,9 +614,9 @@ class Client {
 	/**
 	 * Make a signed HTTP request to SES.
 	 *
-	 * @param string $url         The endpoint URL.
-	 * @param string $body        The request body.
-	 * @param array  $credentials The AWS credentials.
+	 * @param string                                                        $url         The endpoint URL.
+	 * @param string                                                        $body        The request body.
+	 * @param array{access_key: string, secret_key: string, region: string} $credentials The AWS credentials.
 	 * @return array{success: bool, message_id: string|null, error: string|null}
 	 */
 	private function make_request( string $url, string $body, array $credentials ): array {

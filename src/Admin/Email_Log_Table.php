@@ -44,7 +44,7 @@ class Email_Log_Table extends \WP_List_Table {
 	/**
 	 * Get columns.
 	 *
-	 * @return array Column definitions.
+	 * @return array<string, string> Column definitions, keyed by slug.
 	 */
 	public function get_columns(): array {
 		return [
@@ -60,7 +60,7 @@ class Email_Log_Table extends \WP_List_Table {
 	/**
 	 * Get sortable columns.
 	 *
-	 * @return array Sortable column definitions.
+	 * @return array<string, array{0: string, 1: bool}> Map of column slug to [orderby, isInitiallySorted].
 	 */
 	public function get_sortable_columns(): array {
 		return [
@@ -178,7 +178,7 @@ class Email_Log_Table extends \WP_List_Table {
 	/**
 	 * Get bulk actions.
 	 *
-	 * @return array Bulk action definitions.
+	 * @return array<string, string> Bulk action slug => label.
 	 */
 	public function get_bulk_actions(): array {
 		return [
@@ -189,7 +189,7 @@ class Email_Log_Table extends \WP_List_Table {
 	/**
 	 * Get view filters.
 	 *
-	 * @return array View link definitions.
+	 * @return array<string, string> Status slug => rendered <a> link HTML.
 	 */
 	protected function get_views(): array {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended

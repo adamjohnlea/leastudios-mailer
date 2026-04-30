@@ -134,7 +134,7 @@ class Email_Logger {
 	 * @param int         $page     Page number (1-indexed).
 	 * @param int         $per_page Items per page.
 	 * @param string|null $status   Optional status filter.
-	 * @return array Log rows as objects.
+	 * @return array<int, \stdClass> Log rows as wpdb-hydrated objects.
 	 */
 	public function get_logs( int $page = 1, int $per_page = 20, ?string $status = null ): array {
 		global $wpdb;

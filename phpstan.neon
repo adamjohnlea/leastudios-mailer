@@ -6,3 +6,11 @@ parameters:
         - vendor/php-stubs/wordpress-stubs
     bootstrapFiles:
         - phpstan-bootstrap.php
+    # apply_filters() is typed as `mixed` in WordPress at runtime — any callback
+    # can return any value. The wordpress-stubs package narrows the return type
+    # to whatever default value is passed in, which causes false positives on
+    # the runtime defensive checks (e.g. `false === $filtered`, `null === $args`)
+    # that DO catch filter callbacks returning unusual values. Only treat
+    # PHP-level type information as certain; let docblock-claimed types stay
+    # speculative.
+    treatPhpDocTypesAsCertain: false
