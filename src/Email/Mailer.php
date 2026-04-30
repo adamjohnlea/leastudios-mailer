@@ -43,8 +43,8 @@ class Mailer {
 	/**
 	 * Handle wp_mail() interception via pre_wp_mail filter.
 	 *
-	 * @param null|bool $result Null to allow default behavior, bool to short-circuit.
-	 * @param array     $atts   The wp_mail() arguments.
+	 * @param null|bool            $result Null to allow default behavior, bool to short-circuit.
+	 * @param array<string, mixed> $atts   The wp_mail() arguments (to/subject/message/headers/attachments).
 	 * @return bool|null True on success, false on failure.
 	 */
 	public function send( $result, array $atts ) {
@@ -258,7 +258,7 @@ class Mailer {
 	/**
 	 * Parse wp_mail-style headers.
 	 *
-	 * @param string|array $headers Raw headers.
+	 * @param string|array<int, string> $headers Raw headers (CRLF-joined string or list of header lines).
 	 * @return array{from_name: string, from_email: string, content_type: string, cc: string[], bcc: string[], reply_to: string[]}
 	 */
 	private function parse_headers( $headers ): array {

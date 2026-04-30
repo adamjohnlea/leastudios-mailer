@@ -112,7 +112,7 @@ class SNS_Controller extends WP_REST_Controller {
 	/**
 	 * Auto-confirm an SNS subscription.
 	 *
-	 * @param array $body The SNS message body.
+	 * @param array<string, mixed> $body The SNS message body.
 	 * @return void
 	 */
 	private function handle_subscription_confirmation( array $body ): void {
@@ -136,7 +136,7 @@ class SNS_Controller extends WP_REST_Controller {
 	/**
 	 * Process an SES notification message.
 	 *
-	 * @param array $message The parsed notification message.
+	 * @param array<string, mixed> $message The parsed notification message.
 	 * @return void
 	 */
 	private function process_notification( array $message ): void {
@@ -160,7 +160,7 @@ class SNS_Controller extends WP_REST_Controller {
 	/**
 	 * Handle a bounce notification.
 	 *
-	 * @param array $message The notification message.
+	 * @param array<string, mixed> $message The notification message.
 	 * @return void
 	 */
 	private function handle_bounce( array $message ): void {
@@ -174,7 +174,7 @@ class SNS_Controller extends WP_REST_Controller {
 	/**
 	 * Handle a complaint notification.
 	 *
-	 * @param array $message The notification message.
+	 * @param array<string, mixed> $message The notification message.
 	 * @return void
 	 */
 	private function handle_complaint( array $message ): void {
@@ -188,7 +188,7 @@ class SNS_Controller extends WP_REST_Controller {
 	/**
 	 * Handle a delivery notification.
 	 *
-	 * @param array $message The notification message.
+	 * @param array<string, mixed> $message The notification message.
 	 * @return void
 	 */
 	private function handle_delivery( array $message ): void {
@@ -201,7 +201,7 @@ class SNS_Controller extends WP_REST_Controller {
 	/**
 	 * Extract the SES message ID from a notification.
 	 *
-	 * @param array $message The notification message.
+	 * @param array<string, mixed> $message The parsed notification message.
 	 * @return string|null The message ID, or null if not found.
 	 */
 	private function extract_message_id( array $message ): ?string {
@@ -217,7 +217,7 @@ class SNS_Controller extends WP_REST_Controller {
 	 * certificate is anchored by the publicly-trusted CA bundle that
 	 * wp_remote_get validates against when fetching SigningCertURL over HTTPS.
 	 *
-	 * @param array $message The SNS message.
+	 * @param array<string, mixed> $message The SNS message envelope (Type, Signature, SignatureVersion, SigningCertURL, …).
 	 * @return bool Whether the signature is valid.
 	 */
 	private function verify_sns_signature( array $message ): bool {
@@ -296,7 +296,7 @@ class SNS_Controller extends WP_REST_Controller {
 	/**
 	 * Build the string to sign for SNS signature verification.
 	 *
-	 * @param array $message The SNS message.
+	 * @param array<string, mixed> $message The SNS message envelope.
 	 * @return string The string to sign.
 	 */
 	private function build_string_to_sign( array $message ): string {

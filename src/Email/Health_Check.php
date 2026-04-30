@@ -48,7 +48,7 @@ class Health_Check {
 	/**
 	 * Run all health checks and return a structured report.
 	 *
-	 * @return array{credentials: array, sender: array, overall: bool}
+	 * @return array{credentials: array{valid: bool, error?: string}, sender: array{verified: bool, error?: string}, overall: bool}
 	 */
 	public function get_overall_status(): array {
 		$options = get_option( 'leastudios_mailer_options', [] );

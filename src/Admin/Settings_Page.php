@@ -253,8 +253,8 @@ class Settings_Page {
 	/**
 	 * Sanitize options before saving.
 	 *
-	 * @param array $input Raw input values.
-	 * @return array Sanitized values.
+	 * @param array<string, mixed> $input Raw input values.
+	 * @return array<string, mixed> Sanitized values.
 	 */
 	public function sanitize_options( array $input ): array {
 		$current = get_option( self::OPTION_NAME, [] );
@@ -612,7 +612,7 @@ class Settings_Page {
 	/**
 	 * Render a password input field.
 	 *
-	 * @param array $args Field arguments.
+	 * @param array<string, mixed> $args Field arguments (`id`, `placeholder`, …) — passed by add_settings_field.
 	 * @return void
 	 */
 	public function render_password_field( array $args ): void {
@@ -654,7 +654,7 @@ class Settings_Page {
 	/**
 	 * Render a text input field.
 	 *
-	 * @param array $args Field arguments.
+	 * @param array<string, mixed> $args Field arguments (`id`, `type`, …) — passed by add_settings_field.
 	 * @return void
 	 */
 	public function render_text_field( array $args ): void {
@@ -673,7 +673,7 @@ class Settings_Page {
 	/**
 	 * Render a checkbox field.
 	 *
-	 * @param array $args Field arguments.
+	 * @param array<string, mixed> $args Field arguments (`id`, `label`, …) — passed by add_settings_field.
 	 * @return void
 	 */
 	public function render_checkbox_field( array $args ): void {
@@ -692,7 +692,7 @@ class Settings_Page {
 	/**
 	 * Render a number input field.
 	 *
-	 * @param array $args Field arguments.
+	 * @param array<string, mixed> $args Field arguments (`id`, `min`, `max`, `suffix`, …) — passed by add_settings_field.
 	 * @return void
 	 */
 	public function render_number_field( array $args ): void {
@@ -713,7 +713,7 @@ class Settings_Page {
 	/**
 	 * Get default option values.
 	 *
-	 * @return array Default options.
+	 * @return array{access_key: string, secret_key: string, region: string, from_email: string, from_name: string, enabled: bool, log_retention_days: int} Default options.
 	 */
 	private function get_defaults(): array {
 		return [

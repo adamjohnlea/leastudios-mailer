@@ -20,15 +20,15 @@ class Signer {
 	/**
 	 * Sign an HTTP request with AWS Signature Version 4.
 	 *
-	 * @param string $method     HTTP method (POST, GET, etc.).
-	 * @param string $url        Full request URL.
-	 * @param array  $headers    Request headers (key => value).
-	 * @param string $body       Request body.
-	 * @param string $access_key AWS access key ID.
-	 * @param string $secret_key AWS secret access key.
-	 * @param string $region     AWS region.
-	 * @param string $service    AWS service name.
-	 * @return array Signed headers array.
+	 * @param string                $method     HTTP method (POST, GET, etc.).
+	 * @param string                $url        Full request URL.
+	 * @param array<string, string> $headers    Request headers (key => value).
+	 * @param string                $body       Request body.
+	 * @param string                $access_key AWS access key ID.
+	 * @param string                $secret_key AWS secret access key.
+	 * @param string                $region     AWS region.
+	 * @param string                $service    AWS service name.
+	 * @return array<string, string> Signed headers (`Authorization`, `X-Amz-Date`, etc.).
 	 */
 	public function sign(
 		string $method,
@@ -90,11 +90,11 @@ class Signer {
 	/**
 	 * Create the canonical request string.
 	 *
-	 * @param string $method       HTTP method.
-	 * @param string $path         URI path.
-	 * @param string $query        Query string.
-	 * @param array  $headers      Request headers.
-	 * @param string $payload_hash SHA256 hash of the request body.
+	 * @param string                $method       HTTP method.
+	 * @param string                $path         URI path.
+	 * @param string                $query        Query string.
+	 * @param array<string, string> $headers      Request headers.
+	 * @param string                $payload_hash SHA256 hash of the request body.
 	 * @return string The canonical request.
 	 */
 	private function create_canonical_request(
@@ -181,7 +181,7 @@ class Signer {
 	/**
 	 * Get the signed headers string (lowercase, sorted, semicolon-separated).
 	 *
-	 * @param array $headers The request headers.
+	 * @param array<string, string> $headers The request headers.
 	 * @return string The signed headers string.
 	 */
 	private function get_signed_headers_string( array $headers ): string {
