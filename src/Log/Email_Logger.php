@@ -13,6 +13,7 @@ namespace LEAStudios\Mailer\Log;
 defined( 'ABSPATH' ) || exit;
 
 use LEAStudios\Mailer\Database\Migration;
+use LEAStudios\Mailer\Shared\Datetime_Util;
 
 /**
  * Inserts, updates, and queries the email log table.
@@ -68,6 +69,8 @@ class Email_Logger {
 			return 0;
 		}
 
+		$now_utc = Datetime_Util::utc_now_mysql();
+
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$wpdb->insert(
 			Migration::get_table_name(),
@@ -77,8 +80,10 @@ class Email_Logger {
 				'status'        => $log_data['status'],
 				'message_id'    => $log_data['message_id'],
 				'error_message' => $log_data['error_message'],
+				'created_at'    => $now_utc,
+				'updated_at'    => $now_utc,
 			],
-			[ '%s', '%s', '%s', '%s', '%s' ]
+			[ '%s', '%s', '%s', '%s', '%s', '%s', '%s' ]
 		);
 
 		return (int) $wpdb->insert_id;
@@ -95,8 +100,11 @@ class Email_Logger {
 	public function update_status( string $message_id, string $status, ?string $error_message = null ): bool {
 		global $wpdb;
 
-		$data   = [ 'status' => $status ];
-		$format = [ '%s' ];
+		$data   = [
+			'status'     => $status,
+			'updated_at' => Datetime_Util::utc_now_mysql(),
+		];
+		$format = [ '%s', '%s' ];
 
 		if ( null !== $error_message ) {
 			$data['error_message'] = $error_message;
@@ -210,14 +218,15 @@ class Email_Logger {
 	public function delete_old_logs( int $days = 30 ): int {
 		global $wpdb;
 
-		$table = Migration::get_table_name();
+		$table  = Migration::get_table_name();
+		$cutoff = ( new \DateTimeImmutable( "-{$days} days", new \DateTimeZone( 'UTC' ) ) )->format( 'Y-m-d H:i:s' );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$result = $wpdb->query(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				"DELETE FROM {$table} WHERE created_at < DATE_SUB(NOW(), INTERVAL %d DAY)",
-				$days
+				"DELETE FROM {$table} WHERE created_at < %s",
+				$cutoff
 			)
 		);
 

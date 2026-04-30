@@ -13,6 +13,7 @@ namespace LEAStudios\Mailer\Admin;
 defined( 'ABSPATH' ) || exit;
 
 use LEAStudios\Mailer\Log\Email_Logger;
+use LEAStudios\Mailer\Shared\Datetime_Util;
 
 if ( ! class_exists( 'WP_List_Table' ) ) {
 	require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
@@ -158,12 +159,9 @@ class Email_Log_Table extends \WP_List_Table {
 	 * @return string Column HTML.
 	 */
 	public function column_created_at( $item ): string {
-		return esc_html(
-			wp_date(
-				get_option( 'date_format' ) . ' ' . get_option( 'time_format' ),
-				strtotime( $item->created_at )
-			)
-		);
+		$format = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+
+		return esc_html( Datetime_Util::format_for_display( $item->created_at ?? null, $format ) );
 	}
 
 	/**
