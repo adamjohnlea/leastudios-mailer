@@ -88,8 +88,19 @@ class Mailer {
 
 		$from = $from_name ? "{$from_name} <{$from_email}>" : $from_email;
 
-		$content_type = '' !== $parsed['content_type'] ? $parsed['content_type'] : 'text/plain';
-		$is_html      = ( 'text/html' === strtolower( $content_type ) );
+		// Match core wp_mail()'s content-type resolution: an explicit header
+		// in $atts wins, otherwise the wp_mail_content_type filter is
+		// consulted, with text/plain as the final fallback. Plugins (notably
+		// leastudios-email-templates) rely on this filter to opt every
+		// outgoing email into HTML.
+		if ( '' !== $parsed['content_type'] ) {
+			$content_type = $parsed['content_type'];
+		} else {
+			/** This filter is documented in wp-includes/pluggable.php. */
+			$content_type = (string) apply_filters( 'wp_mail_content_type', 'text/plain' );
+		}
+
+		$is_html = ( 'text/html' === strtolower( $content_type ) );
 
 		$body_html = $is_html ? $message : '';
 		$body_text = $is_html ? '' : $message;
@@ -170,7 +181,8 @@ class Mailer {
 			$subject,
 			$status,
 			$ses_result['message_id'],
-			$ses_result['error']
+			$ses_result['error'],
+			$from_email
 		);
 
 		/**
@@ -274,14 +286,23 @@ class Mailer {
 
 			[ $name, $value ] = explode( ':', $header, 2 );
 
-			$name  = strtolower( trim( $name ) );
-			$value = trim( $value );
+			$name = strtolower( trim( $name ) );
+			// Strip any CR/LF from the value to neutralise header-injection
+			// attempts such as `From: foo@bar\r\nBcc: attacker@evil`. Core
+			// wp_mail() runs this defence in WP_Validate_Header_Address; we
+			// short-circuit that path via pre_wp_mail and so must do it here.
+			$value = self::strip_header_crlf( trim( $value ) );
 
 			switch ( $name ) {
 				case 'from':
-					if ( preg_match( '/(.+)<(.+)>/', $value, $matches ) ) {
-						$result['from_name']  = trim( $matches[1], " \t\n\r\0\x0B\"" );
-						$result['from_email'] = trim( $matches[2] );
+					// Match `Name <email@host>` or bare `<email@host>` with
+					// named captures so the From row reliably resolves to
+					// (display-name, address) regardless of which form the
+					// caller used. Anything that doesn't match either form
+					// is treated as a bare address.
+					if ( preg_match( '/^\s*(?:"?(?P<name>[^"<]*?)"?\s*)?<(?P<email>[^>]+)>\s*$/', $value, $matches ) ) {
+						$result['from_name']  = trim( $matches['name'] );
+						$result['from_email'] = trim( $matches['email'] );
 					} else {
 						$result['from_email'] = trim( $value );
 					}
@@ -307,5 +328,17 @@ class Mailer {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Remove every CR/LF (and embedded NUL) from a header value so a
+	 * malicious wp_mail() caller cannot smuggle additional headers through
+	 * a single field.
+	 *
+	 * @param string $value The raw header value.
+	 * @return string
+	 */
+	private static function strip_header_crlf( string $value ): string {
+		return (string) preg_replace( '/[\r\n\x00]+/', '', $value );
 	}
 }

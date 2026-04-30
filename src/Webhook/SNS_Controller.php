@@ -211,10 +211,27 @@ class SNS_Controller extends WP_REST_Controller {
 	/**
 	 * Verify the SNS message signature.
 	 *
+	 * Selects the digest algorithm based on the SignatureVersion field:
+	 * version "1" uses SHA1 (legacy default) and version "2" uses SHA256
+	 * (AWS-recommended). Any other value is rejected. Trust in the signing
+	 * certificate is anchored by the publicly-trusted CA bundle that
+	 * wp_remote_get validates against when fetching SigningCertURL over HTTPS.
+	 *
 	 * @param array $message The SNS message.
 	 * @return bool Whether the signature is valid.
 	 */
 	private function verify_sns_signature( array $message ): bool {
+		$signature_version = $message['SignatureVersion'] ?? '';
+		$algorithm         = match ( (string) $signature_version ) {
+			'1'     => OPENSSL_ALGO_SHA1,
+			'2'     => OPENSSL_ALGO_SHA256,
+			default => null,
+		};
+
+		if ( null === $algorithm ) {
+			return false;
+		}
+
 		$cert_url = $message['SigningCertURL'] ?? '';
 
 		if ( '' === $cert_url ) {
@@ -230,12 +247,21 @@ class SNS_Controller extends WP_REST_Controller {
 			return false;
 		}
 
-		// Fetch the certificate with transient caching.
+		// Fetch the certificate with transient caching. sslverify is the WP
+		// default but we set it explicitly: TLS chain validation is what
+		// anchors our trust in the cert we're about to use to verify the
+		// message signature.
 		$cache_key = 'leastudios_mailer_sns_cert_' . md5( $cert_url );
 		$cert_pem  = get_transient( $cache_key );
 
 		if ( false === $cert_pem ) {
-			$response = wp_remote_get( $cert_url, [ 'timeout' => 10 ] );
+			$response = wp_remote_get(
+				$cert_url,
+				[
+					'timeout'   => 10,
+					'sslverify' => true,
+				]
+			);
 
 			if ( is_wp_error( $response ) ) {
 				return false;
@@ -264,7 +290,7 @@ class SNS_Controller extends WP_REST_Controller {
 			return false;
 		}
 
-		return 1 === openssl_verify( $string_to_sign, $signature, $public_key, OPENSSL_ALGO_SHA1 );
+		return 1 === openssl_verify( $string_to_sign, $signature, $public_key, $algorithm );
 	}
 
 	/**

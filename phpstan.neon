@@ -4,3 +4,5 @@ parameters:
         - src
     scanDirectories:
         - vendor/php-stubs/wordpress-stubs
+    bootstrapFiles:
+        - phpstan-bootstrap.php

@@ -37,6 +37,9 @@ final class Plugin {
 		$migration = new Migration();
 		$migration->maybe_migrate();
 
+		// Translations.
+		add_action( 'init', [ $this, 'load_textdomain' ] );
+
 		// Core services.
 		$encryptor = new Options_Encryptor();
 		$signer    = new Signer();
@@ -73,6 +76,19 @@ final class Plugin {
 		 * Lets other plugins know the mailer is fully initialized.
 		 */
 		do_action( 'leastudios_mailer_initialized' );
+	}
+
+	/**
+	 * Load plugin text domain for translations.
+	 *
+	 * @return void
+	 */
+	public function load_textdomain(): void {
+		load_plugin_textdomain(
+			'leastudios-mailer',
+			false,
+			dirname( plugin_basename( LEASTUDIOS_MAILER_FILE ) ) . '/languages'
+		);
 	}
 
 	/**
