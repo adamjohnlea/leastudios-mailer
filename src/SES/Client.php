@@ -21,8 +21,12 @@ class Client {
 
 	/**
 	 * Allowed AWS regions for SES.
+	 *
+	 * Single source of truth for both the runtime region check (in
+	 * `is_allowed_region` below) and the admin settings dropdown
+	 * (via `Settings_Page::region_choices`).
 	 */
-	private const ALLOWED_REGIONS = [
+	public const ALLOWED_REGIONS = [
 		'us-east-1',
 		'us-east-2',
 		'us-west-1',
@@ -155,7 +159,6 @@ class Client {
 			$body_html,
 			$body_text,
 			$cc,
-			$bcc,
 			$reply_to,
 			$attachments
 		);
@@ -439,6 +442,10 @@ class Client {
 	 * message (for example, when an attachment path becomes unreadable
 	 * between validation and sending).
 	 *
+	 * BCC recipients are intentionally NOT included in the MIME message; they
+	 * are delivered via the SES envelope (Destination.BccAddresses) only, so
+	 * the BCC list is not exposed in the headers each recipient receives.
+	 *
 	 * @param string                                        $from_email  Sender email.
 	 * @param string                                        $from_name   Sender display name.
 	 * @param string[]                                      $to          To addresses.
@@ -446,7 +453,6 @@ class Client {
 	 * @param string                                        $body_html   HTML body.
 	 * @param string                                        $body_text   Text body.
 	 * @param string[]                                      $cc          CC addresses.
-	 * @param string[]                                      $bcc         BCC addresses.
 	 * @param string[]                                      $reply_to    Reply-To addresses.
 	 * @param array<int, array{name: string, path: string}> $attachments Validated attachments.
 	 * @return string|null The raw RFC 5322 message, or null on failure.
@@ -459,7 +465,6 @@ class Client {
 		string $body_html,
 		string $body_text,
 		array $cc,
-		array $bcc,
 		array $reply_to,
 		array $attachments,
 	): ?string {
@@ -488,9 +493,10 @@ class Client {
 				$phpmailer->addCC( $address );
 			}
 
-			foreach ( $bcc as $address ) {
-				$phpmailer->addBCC( $address );
-			}
+			// Intentionally do NOT call addBCC(): BCC recipients are an
+			// envelope-only concern delivered via SES Destination.BccAddresses
+			// in build_raw_request_body(). Including BCC in the MIME headers
+			// would expose those addresses to every recipient.
 
 			foreach ( $reply_to as $address ) {
 				$phpmailer->addReplyTo( $address );
@@ -513,13 +519,36 @@ class Client {
 			}
 
 			if ( ! $phpmailer->preSend() ) {
+				// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- third-party PHPMailer property name.
+				$this->log_phpmailer_error( $phpmailer->ErrorInfo );
 				return null;
 			}
 
 			return $phpmailer->getSentMIMEMessage();
 		} catch ( \PHPMailer\PHPMailer\Exception $e ) {
+			$this->log_phpmailer_error( $e->getMessage() );
 			return null;
 		}
+	}
+
+	/**
+	 * Surface a PHPMailer error so admins debugging "Failed to build raw
+	 * MIME message" don't have to enable a debugger to find the cause.
+	 *
+	 * Gated on WP_DEBUG so the production error log doesn't acquire a
+	 * line per failed build, but the message itself is just an internal
+	 * MIME-construction error (no PII).
+	 *
+	 * @param string $message PHPMailer error string.
+	 * @return void
+	 */
+	private function log_phpmailer_error( string $message ): void {
+		if ( '' === $message || ! defined( 'WP_DEBUG' ) || ! WP_DEBUG ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( '[leaStudios Mailer] PHPMailer: ' . $message );
 	}
 
 	/**

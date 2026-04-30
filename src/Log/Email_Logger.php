@@ -28,6 +28,7 @@ class Email_Logger {
 	 * @param string      $status        Status: sent, failed, delivered, bounced, complained.
 	 * @param string|null $message_id    SES message ID.
 	 * @param string|null $error_message Error details on failure.
+	 * @param string      $from          From address (envelope sender) of the message.
 	 * @return int The inserted row ID, or 0 on failure.
 	 */
 	public function log(
@@ -36,6 +37,7 @@ class Email_Logger {
 		string $status,
 		?string $message_id = null,
 		?string $error_message = null,
+		string $from = '',
 	): int {
 		global $wpdb;
 
@@ -48,6 +50,7 @@ class Email_Logger {
 		 *     The log data to insert.
 		 *
 		 *     @type string      $to_email      Recipient email address(es).
+		 *     @type string      $from_email    Envelope sender / From address.
 		 *     @type string      $subject       Email subject.
 		 *     @type string      $status        Status: sent, failed, delivered, bounced, complained.
 		 *     @type string|null $message_id    SES message ID.
@@ -58,6 +61,7 @@ class Email_Logger {
 			'leastudios_mailer_before_log',
 			[
 				'to_email'      => $to,
+				'from_email'    => $from,
 				'subject'       => $subject,
 				'status'        => $status,
 				'message_id'    => $message_id,
@@ -76,6 +80,7 @@ class Email_Logger {
 			Migration::get_table_name(),
 			[
 				'to_email'      => $log_data['to_email'],
+				'from_email'    => $log_data['from_email'] ?? '',
 				'subject'       => $log_data['subject'],
 				'status'        => $log_data['status'],
 				'message_id'    => $log_data['message_id'],
@@ -83,7 +88,7 @@ class Email_Logger {
 				'created_at'    => $now_utc,
 				'updated_at'    => $now_utc,
 			],
-			[ '%s', '%s', '%s', '%s', '%s', '%s', '%s' ]
+			[ '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' ]
 		);
 
 		return (int) $wpdb->insert_id;

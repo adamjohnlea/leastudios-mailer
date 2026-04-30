@@ -15,6 +15,7 @@ defined( 'ABSPATH' ) || exit;
 use LEAStudios\Mailer\Email\Health_Check;
 use LEAStudios\Mailer\Encryption\Options_Encryptor;
 use LEAStudios\Mailer\Log\Email_Logger;
+use LEAStudios\Mailer\SES\Client;
 use LEAStudios\Mailer\Security\Nonce;
 
 /**
@@ -38,9 +39,10 @@ class Settings_Page {
 	private const CAPABILITY = 'manage_options';
 
 	/**
-	 * Allowed AWS regions.
+	 * Display labels for the admin region select. Keys MUST be a superset
+	 * of {@see Client::ALLOWED_REGIONS}; the runtime allow-list lives there.
 	 */
-	private const REGIONS = [
+	private const REGION_LABELS = [
 		'us-east-1'      => 'US East (N. Virginia)',
 		'us-east-2'      => 'US East (Ohio)',
 		'us-west-1'      => 'US West (N. California)',
@@ -63,6 +65,19 @@ class Settings_Page {
 		'me-south-1'     => 'Middle East (Bahrain)',
 		'sa-east-1'      => 'South America (São Paulo)',
 	];
+
+	/**
+	 * Region <code> => <label> pairs filtered by the runtime allow-list.
+	 *
+	 * @return array<string, string>
+	 */
+	private static function region_choices(): array {
+		$choices = [];
+		foreach ( Client::ALLOWED_REGIONS as $code ) {
+			$choices[ $code ] = self::REGION_LABELS[ $code ];
+		}
+		return $choices;
+	}
 
 	/**
 	 * The settings page hook suffix.
@@ -262,7 +277,7 @@ class Settings_Page {
 		}
 
 		$region = sanitize_text_field( $input['region'] ?? 'us-east-1' );
-		if ( ! array_key_exists( $region, self::REGIONS ) ) {
+		if ( ! in_array( $region, Client::ALLOWED_REGIONS, true ) ) {
 			$region = 'us-east-1';
 		}
 		$sanitized['region'] = $region;
@@ -334,9 +349,6 @@ class Settings_Page {
 			return;
 		}
 
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$active_tab = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'configuration';
-
 		$tabs = [
 			'configuration' => __( 'Configuration', 'leastudios-mailer' ),
 			'email-log'     => __( 'Email Log', 'leastudios-mailer' ),
@@ -351,6 +363,14 @@ class Settings_Page {
 		 * @param array $tabs Associative array of tab slug => label.
 		 */
 		$tabs = apply_filters( 'leastudios_mailer_settings_tabs', $tabs );
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$tab_param = isset( $_GET['tab'] ) ? sanitize_text_field( wp_unslash( $_GET['tab'] ) ) : 'configuration';
+		// Constrain the tab to a known key — the slug feeds a dynamic
+		// `do_action()` below, and we don't want a query-string value to
+		// fire arbitrary action hook names. The third-party-tabs filter
+		// has already had a chance to register additional keys.
+		$active_tab = isset( $tabs[ $tab_param ] ) ? $tab_param : 'configuration';
 
 		?>
 		<div class="wrap">
@@ -618,7 +638,7 @@ class Settings_Page {
 
 		echo '<select id="region" name="' . esc_attr( self::OPTION_NAME ) . '[region]">';
 
-		foreach ( self::REGIONS as $value => $label ) {
+		foreach ( self::region_choices() as $value => $label ) {
 			printf(
 				'<option value="%s" %s>%s (%s)</option>',
 				esc_attr( $value ),
