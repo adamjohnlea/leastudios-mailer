@@ -94,15 +94,8 @@ class Mailer {
 		$body_html = $is_html ? $message : '';
 		$body_text = $is_html ? '' : $message;
 
-		if ( ! empty( $atts['attachments'] ) ) {
-			/**
-			 * Fires when attachments are present but cannot be sent via SES Simple content.
-			 *
-			 * @param array $attachments The attachment file paths.
-			 * @param array $atts        The original wp_mail arguments.
-			 */
-			do_action( 'leastudios_mailer_attachments_skipped', $atts['attachments'], $atts );
-		}
+		$raw_attachments = isset( $atts['attachments'] ) ? (array) $atts['attachments'] : [];
+		$attachments     = $this->normalize_attachments( $raw_attachments );
 
 		/**
 		 * Filter the full email arguments before sending via SES.
@@ -110,22 +103,24 @@ class Mailer {
 		 * Return null to skip sending the email entirely.
 		 *
 		 * @param array $args The email arguments with keys: from, to, subject,
-		 *                    body_html, body_text, cc, bcc, reply_to, headers.
+		 *                    body_html, body_text, cc, bcc, reply_to, headers,
+		 *                    attachments.
 		 * @param array $atts The original wp_mail() arguments.
 		 * @return array|null Filtered args, or null to skip sending.
 		 */
 		$filtered_args = apply_filters(
 			'leastudios_mailer_pre_send',
 			[
-				'from'      => $from,
-				'to'        => $to,
-				'subject'   => $subject,
-				'body_html' => $body_html,
-				'body_text' => $body_text,
-				'cc'        => $parsed['cc'],
-				'bcc'       => $parsed['bcc'],
-				'reply_to'  => $parsed['reply_to'],
-				'headers'   => $headers,
+				'from'        => $from,
+				'to'          => $to,
+				'subject'     => $subject,
+				'body_html'   => $body_html,
+				'body_text'   => $body_text,
+				'cc'          => $parsed['cc'],
+				'bcc'         => $parsed['bcc'],
+				'reply_to'    => $parsed['reply_to'],
+				'headers'     => $headers,
+				'attachments' => $attachments,
 			],
 			$atts
 		);
@@ -134,22 +129,38 @@ class Mailer {
 			return null;
 		}
 
-		$from      = $filtered_args['from'];
-		$to        = $filtered_args['to'];
-		$subject   = $filtered_args['subject'];
-		$body_html = $filtered_args['body_html'];
-		$body_text = $filtered_args['body_text'];
+		$from        = $filtered_args['from'];
+		$to          = $filtered_args['to'];
+		$subject     = $filtered_args['subject'];
+		$body_html   = $filtered_args['body_html'];
+		$body_text   = $filtered_args['body_text'];
+		$attachments = isset( $filtered_args['attachments'] ) ? (array) $filtered_args['attachments'] : [];
 
-		$ses_result = $this->ses_client->send_email(
-			$from,
-			$to,
-			$subject,
-			$body_html,
-			$body_text,
-			$filtered_args['cc'],
-			$filtered_args['bcc'],
-			$filtered_args['reply_to']
-		);
+		if ( ! empty( $attachments ) ) {
+			$ses_result = $this->ses_client->send_raw_email(
+				$from_email,
+				$from_name,
+				$to,
+				$subject,
+				$body_html,
+				$body_text,
+				$filtered_args['cc'],
+				$filtered_args['bcc'],
+				$filtered_args['reply_to'],
+				$attachments
+			);
+		} else {
+			$ses_result = $this->ses_client->send_email(
+				$from,
+				$to,
+				$subject,
+				$body_html,
+				$body_text,
+				$filtered_args['cc'],
+				$filtered_args['bcc'],
+				$filtered_args['reply_to']
+			);
+		}
 
 		$to_string = implode( ', ', $to );
 		$status    = $ses_result['success'] ? 'sent' : 'failed';
@@ -172,6 +183,64 @@ class Mailer {
 		do_action( 'leastudios_mailer_email_sent', $ses_result, $atts, $status );
 
 		return $ses_result['success'];
+	}
+
+	/**
+	 * Normalize a wp_mail-style attachments array.
+	 *
+	 * Accepts both forms accepted by core `wp_mail()`:
+	 *
+	 *   - Legacy: `[ '/abs/path/to/file.pdf', ... ]`
+	 *   - WP 5.6+: `[ 'display-name.pdf' => '/abs/path/to/file.pdf', ... ]`
+	 *
+	 * Each entry is checked for file existence and readability. Unreadable
+	 * entries are dropped and reported via the
+	 * {@see 'leastudios_mailer_attachments_skipped'} action so site owners can
+	 * log or alert on them.
+	 *
+	 * @param array<int|string, mixed> $attachments Raw attachments array.
+	 * @return array<int, array{name: string, path: string}> Validated attachments.
+	 */
+	private function normalize_attachments( array $attachments ): array {
+		if ( empty( $attachments ) ) {
+			return [];
+		}
+
+		$normalized = [];
+		$skipped    = [];
+
+		foreach ( $attachments as $key => $value ) {
+			if ( ! is_string( $value ) || '' === $value ) {
+				$skipped[ (string) $key ] = $value;
+				continue;
+			}
+
+			if ( ! is_file( $value ) || ! is_readable( $value ) ) {
+				$skipped[ (string) $key ] = $value;
+				continue;
+			}
+
+			$name = is_string( $key ) && '' !== $key ? $key : basename( $value );
+
+			$normalized[] = [
+				'name' => $name,
+				'path' => $value,
+			];
+		}
+
+		if ( ! empty( $skipped ) ) {
+			/**
+			 * Fires when one or more attachments cannot be read and are dropped.
+			 *
+			 * Each entry preserves its original key so handlers can distinguish
+			 * between the indexed and keyed `wp_mail()` attachment forms.
+			 *
+			 * @param array $skipped Attachment entries that were dropped.
+			 */
+			do_action( 'leastudios_mailer_attachments_skipped', $skipped );
+		}
+
+		return $normalized;
 	}
 
 	/**

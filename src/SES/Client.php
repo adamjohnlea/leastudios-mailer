@@ -83,14 +83,9 @@ class Client {
 		$credentials = $this->get_credentials();
 
 		if ( null === $credentials ) {
-			return [
-				'success'    => false,
-				'message_id' => null,
-				'error'      => __( 'SES credentials are not configured or could not be decrypted.', 'leastudios-mailer' ),
-			];
+			return $this->credentials_error();
 		}
 
-		$url  = $this->get_endpoint( $credentials['region'] );
 		$body = $this->build_request_body( $from, $to, $subject, $body_html, $body_text, $cc, $bcc, $reply_to );
 
 		/**
@@ -111,20 +106,91 @@ class Client {
 			$subject
 		);
 
-		$body = (string) wp_json_encode( $body_array );
+		return $this->dispatch( $credentials, (string) wp_json_encode( $body_array ) );
+	}
 
-		$result = $this->make_request( $url, $body, $credentials );
+	/**
+	 * Send an email with attachments via SES v2 SendEmail (Raw content).
+	 *
+	 * Builds an RFC 5322 MIME message using the PHPMailer library bundled with
+	 * WordPress core, then submits it to the same SES v2 endpoint as
+	 * {@see self::send_email()} but using `Content.Raw` so attachments are
+	 * preserved.
+	 *
+	 * @param string                                        $from_email  Sender email address.
+	 * @param string                                        $from_name   Sender display name (may be empty).
+	 * @param string[]                                      $to          Recipient email addresses.
+	 * @param string                                        $subject     Email subject.
+	 * @param string                                        $body_html   HTML body content.
+	 * @param string                                        $body_text   Plain text body content.
+	 * @param string[]                                      $cc          CC addresses.
+	 * @param string[]                                      $bcc         BCC addresses.
+	 * @param string[]                                      $reply_to    Reply-To addresses.
+	 * @param array<int, array{name: string, path: string}> $attachments Validated attachments.
+	 * @return array{success: bool, message_id: string|null, error: string|null}
+	 */
+	public function send_raw_email(
+		string $from_email,
+		string $from_name,
+		array $to,
+		string $subject,
+		string $body_html,
+		string $body_text = '',
+		array $cc = [],
+		array $bcc = [],
+		array $reply_to = [],
+		array $attachments = [],
+	): array {
+		$credentials = $this->get_credentials();
+
+		if ( null === $credentials ) {
+			return $this->credentials_error();
+		}
+
+		$raw_message = $this->build_raw_message(
+			$from_email,
+			$from_name,
+			$to,
+			$subject,
+			$body_html,
+			$body_text,
+			$cc,
+			$bcc,
+			$reply_to,
+			$attachments
+		);
+
+		if ( null === $raw_message ) {
+			return [
+				'success'    => false,
+				'message_id' => null,
+				'error'      => __( 'Failed to build raw MIME message for SES.', 'leastudios-mailer' ),
+			];
+		}
+
+		$body_array = $this->build_raw_request_body( $from_email, $to, $cc, $bcc, $reply_to, $raw_message );
 
 		/**
-		 * Fires after the SES API response is received.
+		 * Filter the JSON request body before sending a Raw email to the SES API.
 		 *
-		 * @param array  $result The result array with keys: success, message_id, error.
-		 * @param string $url    The SES API endpoint URL.
-		 * @param string $body   The JSON request body that was sent.
+		 * Mirrors {@see leastudios_mailer_ses_request_body} but is fired only for
+		 * the Raw (attachment-bearing) send path. The decoded body contains a
+		 * `Content.Raw.Data` field whose value is the base64-encoded MIME blob.
+		 *
+		 * @param array    $body_array The decoded request body array.
+		 * @param string   $from_email The sender address.
+		 * @param string[] $to         The recipient addresses.
+		 * @param string   $subject    The email subject.
 		 */
-		do_action( 'leastudios_mailer_ses_response', $result, $url, $body );
+		$body_array = apply_filters(
+			'leastudios_mailer_ses_raw_request_body',
+			$body_array,
+			$from_email,
+			$to,
+			$subject
+		);
 
-		return $result;
+		return $this->dispatch( $credentials, (string) wp_json_encode( $body_array ) );
 	}
 
 	/**
@@ -341,6 +407,179 @@ class Client {
 		}
 
 		return (string) wp_json_encode( $payload );
+	}
+
+	/**
+	 * Send a JSON body to the SES v2 SendEmail endpoint and fire the response action.
+	 *
+	 * @param array{access_key: string, secret_key: string, region: string} $credentials The AWS credentials.
+	 * @param string                                                        $body        The JSON request body.
+	 * @return array{success: bool, message_id: string|null, error: string|null}
+	 */
+	private function dispatch( array $credentials, string $body ): array {
+		$url    = $this->get_endpoint( $credentials['region'] );
+		$result = $this->make_request( $url, $body, $credentials );
+
+		/**
+		 * Fires after the SES API response is received.
+		 *
+		 * @param array  $result The result array with keys: success, message_id, error.
+		 * @param string $url    The SES API endpoint URL.
+		 * @param string $body   The JSON request body that was sent.
+		 */
+		do_action( 'leastudios_mailer_ses_response', $result, $url, $body );
+
+		return $result;
+	}
+
+	/**
+	 * Build a raw RFC 5322 MIME message using PHPMailer.
+	 *
+	 * Returns null if PHPMailer raises an exception while assembling the
+	 * message (for example, when an attachment path becomes unreadable
+	 * between validation and sending).
+	 *
+	 * @param string                                        $from_email  Sender email.
+	 * @param string                                        $from_name   Sender display name.
+	 * @param string[]                                      $to          To addresses.
+	 * @param string                                        $subject     Subject.
+	 * @param string                                        $body_html   HTML body.
+	 * @param string                                        $body_text   Text body.
+	 * @param string[]                                      $cc          CC addresses.
+	 * @param string[]                                      $bcc         BCC addresses.
+	 * @param string[]                                      $reply_to    Reply-To addresses.
+	 * @param array<int, array{name: string, path: string}> $attachments Validated attachments.
+	 * @return string|null The raw RFC 5322 message, or null on failure.
+	 */
+	private function build_raw_message(
+		string $from_email,
+		string $from_name,
+		array $to,
+		string $subject,
+		string $body_html,
+		string $body_text,
+		array $cc,
+		array $bcc,
+		array $reply_to,
+		array $attachments,
+	): ?string {
+		// PHPMailer ships with WordPress core, but is not autoloaded until
+		// wp_mail() proper would otherwise need it. Load it on demand so we
+		// can use the same MIME builder WordPress itself uses.
+		if ( ! class_exists( \PHPMailer\PHPMailer\PHPMailer::class, false ) ) {
+			require_once ABSPATH . WPINC . '/PHPMailer/PHPMailer.php'; // @phpstan-ignore-line constant.notFound
+			require_once ABSPATH . WPINC . '/PHPMailer/Exception.php'; // @phpstan-ignore-line constant.notFound
+		}
+
+		try {
+			$phpmailer           = new \PHPMailer\PHPMailer\PHPMailer( true );
+			$phpmailer->CharSet  = 'UTF-8';
+			$phpmailer->Encoding = 'base64';
+			$phpmailer->XMailer  = ' ';
+			$phpmailer->Sender   = $from_email;
+
+			$phpmailer->setFrom( $from_email, $from_name, false );
+
+			foreach ( $to as $address ) {
+				$phpmailer->addAddress( $address );
+			}
+
+			foreach ( $cc as $address ) {
+				$phpmailer->addCC( $address );
+			}
+
+			foreach ( $bcc as $address ) {
+				$phpmailer->addBCC( $address );
+			}
+
+			foreach ( $reply_to as $address ) {
+				$phpmailer->addReplyTo( $address );
+			}
+
+			$phpmailer->Subject = $subject;
+
+			if ( '' !== $body_html ) {
+				$phpmailer->isHTML( true );
+				$phpmailer->Body = $body_html;
+				if ( '' !== $body_text ) {
+					$phpmailer->AltBody = $body_text;
+				}
+			} else {
+				$phpmailer->Body = $body_text;
+			}
+
+			foreach ( $attachments as $attachment ) {
+				$phpmailer->addAttachment( $attachment['path'], $attachment['name'] );
+			}
+
+			if ( ! $phpmailer->preSend() ) {
+				return null;
+			}
+
+			return $phpmailer->getSentMIMEMessage();
+		} catch ( \PHPMailer\PHPMailer\Exception $e ) {
+			return null;
+		}
+	}
+
+	/**
+	 * Build the SES v2 SendEmail JSON payload for the Raw content path.
+	 *
+	 * @param string   $from_email   Envelope sender.
+	 * @param string[] $to           To addresses.
+	 * @param string[] $cc           CC addresses.
+	 * @param string[] $bcc          BCC addresses.
+	 * @param string[] $reply_to     Reply-To addresses.
+	 * @param string   $raw_message  The RFC 5322 MIME message.
+	 * @return array<string, mixed>
+	 */
+	private function build_raw_request_body(
+		string $from_email,
+		array $to,
+		array $cc,
+		array $bcc,
+		array $reply_to,
+		string $raw_message,
+	): array {
+		$destination = [ 'ToAddresses' => array_values( $to ) ];
+
+		if ( ! empty( $cc ) ) {
+			$destination['CcAddresses'] = array_values( $cc );
+		}
+
+		if ( ! empty( $bcc ) ) {
+			$destination['BccAddresses'] = array_values( $bcc );
+		}
+
+		$payload = [
+			'FromEmailAddress' => $from_email,
+			'Destination'      => $destination,
+			'Content'          => [
+				'Raw' => [
+					// SES v2 expects the MIME blob base64-encoded inside the JSON payload.
+					'Data' => base64_encode( $raw_message ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
+				],
+			],
+		];
+
+		if ( ! empty( $reply_to ) ) {
+			$payload['ReplyToAddresses'] = array_values( $reply_to );
+		}
+
+		return $payload;
+	}
+
+	/**
+	 * Build the standard "credentials missing" failure result.
+	 *
+	 * @return array{success: bool, message_id: string|null, error: string|null}
+	 */
+	private function credentials_error(): array {
+		return [
+			'success'    => false,
+			'message_id' => null,
+			'error'      => __( 'SES credentials are not configured or could not be decrypted.', 'leastudios-mailer' ),
+		];
 	}
 
 	/**

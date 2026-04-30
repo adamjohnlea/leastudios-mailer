@@ -35,10 +35,30 @@
         </properties>
     </rule>
 
+    <!-- PHPMailer (bundled with WP core) exposes PascalCase public properties
+         that we cannot rename. Whitelist the ones we touch when assembling
+         raw MIME messages for SES. -->
+    <rule ref="WordPress.NamingConventions.ValidVariableName">
+        <properties>
+            <property name="allowed_custom_properties" type="array">
+                <element value="CharSet"/>
+                <element value="Encoding"/>
+                <element value="XMailer"/>
+                <element value="Sender"/>
+                <element value="Subject"/>
+                <element value="Body"/>
+                <element value="AltBody"/>
+            </property>
+        </properties>
+    </rule>
+
     <rule ref="PHPCompatibilityWP"/>
 
     <!-- Relax docblock requirements in tests; test names are the documentation. -->
     <rule ref="Squiz.Commenting.FunctionComment.Missing">
+        <exclude-pattern>tests/</exclude-pattern>
+    </rule>
+    <rule ref="Squiz.Commenting.FunctionComment.MissingParamTag">
         <exclude-pattern>tests/</exclude-pattern>
     </rule>
     <rule ref="Squiz.Commenting.ClassComment.Missing">
@@ -51,6 +71,12 @@
         <exclude-pattern>tests/</exclude-pattern>
     </rule>
     <rule ref="WordPress.Security.EscapeOutput.OutputNotEscaped">
+        <exclude-pattern>tests/</exclude-pattern>
+    </rule>
+
+    <!-- Tests need direct filesystem operations to manage temp fixtures;
+         WP_Filesystem is overkill in test scaffolding. -->
+    <rule ref="WordPress.WP.AlternativeFunctions">
         <exclude-pattern>tests/</exclude-pattern>
     </rule>
 

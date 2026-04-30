@@ -46,6 +46,7 @@ add_filter( 'leastudios_mailer_should_intercept', function ( bool $should_interc
   - `bcc` *(string[])* — BCC addresses.
   - `reply_to` *(string[])* — Reply-To addresses.
   - `headers` *(string|array)* — Original raw headers from `wp_mail()`.
+  - `attachments` *(array)* — Validated attachments as `[ ['name' => string, 'path' => string], ... ]`. Empty when none were supplied or all were unreadable. Modifying this array changes which files are sent (see below).
 - `$atts` *(array)* — The original `wp_mail()` arguments.
 
 **Return:** Filtered `$args` array, or `null` to skip sending entirely.
@@ -83,7 +84,7 @@ add_filter( 'leastudios_mailer_pre_send', function ( ?array $args, array $atts )
 - `$to` *(string[])* — The recipient addresses.
 - `$subject` *(string)* — The email subject.
 
-**Description:** Filter the SES API request payload before it is signed and sent. Use this to add SES-specific features such as configuration sets, email tags, custom headers, or list management options.
+**Description:** Filter the SES API request payload before it is signed and sent. Fires only on the no-attachment send path, where SES `Content.Simple` is used. For emails carrying attachments, see `leastudios_mailer_ses_raw_request_body` below — the two filters mirror each other.
 
 **Example:**
 ```php
@@ -103,6 +104,28 @@ add_filter( 'leastudios_mailer_ses_request_body', function ( array $body, string
         ],
     ];
 
+    return $body;
+}, 10, 4 );
+```
+
+---
+
+#### `leastudios_mailer_ses_raw_request_body`
+
+**Type:** Filter
+**Location:** `src/SES/Client.php`
+**Parameters:**
+- `$body` *(array)* — The decoded JSON request body for the SES v2 `SendEmail` API call when sending with attachments. Contains `FromEmailAddress`, `Destination`, `Content.Raw.Data` (a base64-encoded RFC 5322 MIME message), and optionally `ReplyToAddresses`.
+- `$from_email` *(string)* — The sender address.
+- `$to` *(string[])* — The recipient addresses.
+- `$subject` *(string)* — The email subject.
+
+**Description:** Mirror of `leastudios_mailer_ses_request_body` for the Raw (attachment-bearing) send path. Use it to attach configuration sets, tags, or other top-level SES options when the email carries one or more attachments. Note that the MIME message itself is already encoded — modify `Content.Raw.Data` only if you know what you're doing (it must remain a valid base64-encoded RFC 5322 message).
+
+**Example:**
+```php
+add_filter( 'leastudios_mailer_ses_raw_request_body', function ( array $body, string $from, array $to, string $subject ): array {
+    $body['ConfigurationSetName'] = 'my-tracking-config';
     return $body;
 }, 10, 4 );
 ```
@@ -208,21 +231,21 @@ add_action( 'leastudios_mailer_email_sent', function ( array $result, array $att
 **Type:** Action
 **Location:** `src/Email/Mailer.php`
 **Parameters:**
-- `$attachments` *(array)* — The attachment file paths that were present on the email.
-- `$atts` *(array)* — The original `wp_mail()` arguments.
+- `$skipped` *(array)* — The attachment entries that were dropped, preserving their original keys. Each value is whatever was supplied in `$atts['attachments']` (typically a string path, but unexpected types are also captured here).
 
-**Description:** Fires when an email contains attachments that cannot be sent via SES Simple content mode. SES Simple mode does not support attachments; this action lets you log or handle the situation (e.g. upload attachments to S3 and include links in the body).
+**Description:** Fires when one or more attachments supplied to `wp_mail()` cannot be read from disk and are therefore dropped before SES delivery. Valid, readable attachments are sent — this action only fires for entries the mailer had to skip. Use it to log or alert when expected files are missing.
 
 **Example:**
 ```php
-add_action( 'leastudios_mailer_attachments_skipped', function ( array $attachments, array $atts ): void {
-    error_log( sprintf(
-        '[leaStudios Mailer] %d attachment(s) skipped for email to %s: %s',
-        count( $attachments ),
-        is_array( $atts['to'] ) ? implode( ', ', $atts['to'] ) : $atts['to'],
-        implode( ', ', array_map( 'basename', $attachments ) )
-    ) );
-}, 10, 2 );
+add_action( 'leastudios_mailer_attachments_skipped', function ( array $skipped ): void {
+    foreach ( $skipped as $key => $value ) {
+        error_log( sprintf(
+            '[leaStudios Mailer] Unreadable attachment dropped: %s => %s',
+            (string) $key,
+            is_string( $value ) ? $value : gettype( $value )
+        ) );
+    }
+} );
 ```
 
 ---
@@ -306,9 +329,25 @@ When `wp_mail()` is called and the mailer is enabled, hooks fire in this order:
 
 1. **`leastudios_mailer_should_intercept`** — Decide whether to handle the email.
 2. `wp_mail_from` / `wp_mail_from_name` — Standard WordPress sender filters.
-3. **`leastudios_mailer_attachments_skipped`** — If attachments are present.
-4. **`leastudios_mailer_pre_send`** — Final chance to modify or cancel the email.
-5. **`leastudios_mailer_ses_request_body`** — Modify the raw SES API payload.
+3. **`leastudios_mailer_attachments_skipped`** — Only if one or more attachments were unreadable and had to be dropped.
+4. **`leastudios_mailer_pre_send`** — Final chance to modify or cancel the email (including the validated `attachments` list).
+5. **`leastudios_mailer_ses_request_body`** *(no-attachment send)* or **`leastudios_mailer_ses_raw_request_body`** *(attachment send)* — Modify the SES API payload.
 6. **`leastudios_mailer_ses_response`** — React to the SES API response.
 7. **`leastudios_mailer_before_log`** — Filter or suppress the log entry.
 8. **`leastudios_mailer_email_sent`** — Post-send action for notifications or logging.
+
+## Attachments
+
+Attachments passed to `wp_mail()` are forwarded to SES using the v2 `SendEmail` API with `Content.Raw`. The mailer assembles an RFC 5322 MIME message via the PHPMailer library bundled with WordPress core, so attachment encoding (Base64, Content-Type sniffing, headers) matches what core would have produced for the default transport.
+
+Both attachment forms accepted by `wp_mail()` are supported:
+
+```php
+// Indexed (legacy) — display name is derived from basename().
+wp_mail( $to, $subject, $body, $headers, [ '/abs/path/report.pdf' ] );
+
+// Keyed (WP 5.6+) — explicit display name.
+wp_mail( $to, $subject, $body, $headers, [ 'Quarterly Report.pdf' => '/abs/path/report.pdf' ] );
+```
+
+Files that do not exist or are not readable at send time are dropped silently from SES delivery and reported via the `leastudios_mailer_attachments_skipped` action so you can alert on them. The remaining valid files are still sent.
