@@ -207,6 +207,35 @@ class MailerTest extends TestCase {
 		);
 	}
 
+	public function test_send_returns_false_when_pre_send_filter_returns_null(): void {
+		update_option(
+			'leastudios_mailer_options',
+			[
+				'enabled'    => true,
+				'from_email' => 'sender@example.com',
+			]
+		);
+
+		add_filter( 'leastudios_mailer_pre_send', '__return_null' );
+
+		$this->ses_client->expects( $this->never() )->method( 'send_email' );
+		$this->ses_client->expects( $this->never() )->method( 'send_raw_email' );
+
+		$result = $this->mailer->send(
+			null,
+			[
+				'to'      => 'test@example.com',
+				'subject' => 'Drop me',
+				'message' => 'Hello',
+				'headers' => [],
+			]
+		);
+
+		// Returning false short-circuits pre_wp_mail so core does NOT fall
+		// back to its default transport; the email is dropped entirely.
+		$this->assertFalse( $result );
+	}
+
 	public function test_send_returns_null_when_intercept_filter_is_false(): void {
 		update_option(
 			'leastudios_mailer_options',
@@ -422,6 +451,62 @@ class MailerTest extends TestCase {
 				'subject' => 'No Attachment',
 				'message' => 'Hi',
 				'headers' => [],
+			]
+		);
+	}
+
+	public function test_pre_send_from_override_applies_to_raw_path(): void {
+		update_option(
+			'leastudios_mailer_options',
+			[
+				'enabled'    => true,
+				'from_email' => 'sender@example.com',
+				'from_name'  => 'Original Sender',
+			]
+		);
+
+		$pdf = $this->make_temp_file( '%PDF-1.4 stub', '.pdf' );
+
+		add_filter(
+			'leastudios_mailer_pre_send',
+			static function ( array $args ): array {
+				$args['from'] = 'Override Sender <override@example.com>';
+				return $args;
+			}
+		);
+
+		$this->ses_client->expects( $this->once() )
+			->method( 'send_raw_email' )
+			->with(
+				$this->equalTo( 'override@example.com' ),
+				$this->equalTo( 'Override Sender' ),
+				$this->anything(),
+				$this->anything(),
+				$this->anything(),
+				$this->anything(),
+				$this->anything(),
+				$this->anything(),
+				$this->anything(),
+				$this->anything(),
+			)
+			->willReturn(
+				[
+					'success'    => true,
+					'message_id' => 'raw-msg-override',
+					'error'      => '',
+				]
+			);
+
+		$this->logger->method( 'log' );
+
+		$this->mailer->send(
+			null,
+			[
+				'to'          => 'recipient@example.com',
+				'subject'     => 'Override From',
+				'message'     => 'Hi',
+				'headers'     => [],
+				'attachments' => [ 'report.pdf' => $pdf ],
 			]
 		);
 	}

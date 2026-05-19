@@ -31,13 +31,16 @@ class Health_Check {
 	/**
 	 * Send a test email.
 	 *
-	 * @param string $to   Recipient email address.
-	 * @param string $from Sender email address.
+	 * @param string $to        Recipient email address.
+	 * @param string $from      Sender email address (bare, no display name).
+	 * @param string $from_name Sender display name. Empty string sends with no display name.
 	 * @return array{success: bool, message_id: string|null, error: string|null}
 	 */
-	public function send_test_email( string $to, string $from ): array {
+	public function send_test_email( string $to, string $from, string $from_name = '' ): array {
+		$from_expression = '' !== $from_name ? "{$from_name} <{$from}>" : $from;
+
 		return $this->ses_client->send_email(
-			$from,
+			$from_expression,
 			[ $to ],
 			__( 'leaStudios Mailer — Test Email', 'leastudios-mailer' ),
 			$this->get_test_email_html(),

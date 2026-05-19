@@ -196,6 +196,31 @@ class Email_Logger {
 	}
 
 	/**
+	 * Get a status-keyed map of row counts in a single query.
+	 *
+	 * Used by the email-log view filters so rendering counts for all
+	 * statuses is one `GROUP BY` round-trip instead of one `COUNT(*)` per
+	 * status. Statuses not present in the table are absent from the map;
+	 * callers should treat missing keys as zero.
+	 *
+	 * @return array<string, int>
+	 */
+	public function get_counts_by_status(): array {
+		global $wpdb;
+
+		$table = Migration::get_table_name();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results( "SELECT status, COUNT(*) AS total FROM {$table} GROUP BY status" );
+
+		$counts = [];
+		foreach ( $rows as $row ) {
+			$counts[ (string) $row->status ] = (int) $row->total;
+		}
+		return $counts;
+	}
+
+	/**
 	 * Delete a log entry by ID.
 	 *
 	 * @param int $id The log entry ID.

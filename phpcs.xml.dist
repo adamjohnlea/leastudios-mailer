@@ -37,7 +37,9 @@
 
     <!-- PHPMailer (bundled with WP core) exposes PascalCase public properties
          that we cannot rename. Whitelist the ones we touch when assembling
-         raw MIME messages for SES. -->
+         raw MIME messages for SES. Schema-introspection tests read mysqli's
+         PascalCase columns from `SHOW COLUMNS` / `SHOW INDEX` results which
+         likewise can't be renamed. -->
     <rule ref="WordPress.NamingConventions.ValidVariableName">
         <properties>
             <property name="allowed_custom_properties" type="array">
@@ -48,6 +50,9 @@
                 <element value="Subject"/>
                 <element value="Body"/>
                 <element value="AltBody"/>
+                <element value="Field"/>
+                <element value="Type"/>
+                <element value="Key_name"/>
             </property>
         </properties>
     </rule>
@@ -77,6 +82,33 @@
     <!-- Tests need direct filesystem operations to manage temp fixtures;
          WP_Filesystem is overkill in test scaffolding. -->
     <rule ref="WordPress.WP.AlternativeFunctions">
+        <exclude-pattern>tests/</exclude-pattern>
+    </rule>
+
+    <!-- Tests build crypto / SNS / SigV4 fixtures, which legitimately use
+         base64_encode and base64_decode. Production code uses ignore
+         pragmas inline; test scaffolding is exempted wholesale. -->
+    <rule ref="WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode">
+        <exclude-pattern>tests/</exclude-pattern>
+    </rule>
+    <rule ref="WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode">
+        <exclude-pattern>tests/</exclude-pattern>
+    </rule>
+
+    <!-- Schema-introspection tests run SHOW COLUMNS / SHOW INDEX / fresh
+         CREATE TABLE statements that don't need $wpdb->prepare(). The table
+         name comes from a private constant; user input is not involved. -->
+    <rule ref="WordPress.DB.PreparedSQL">
+        <exclude-pattern>tests/</exclude-pattern>
+    </rule>
+    <rule ref="WordPress.DB.DirectDatabaseQuery">
+        <exclude-pattern>tests/</exclude-pattern>
+    </rule>
+
+    <!-- Yoda conditions are a style preference for production code. In test
+         assertions, "actual === expected" reads more naturally and matches
+         PHPUnit's own argument order. -->
+    <rule ref="WordPress.PHP.YodaConditions">
         <exclude-pattern>tests/</exclude-pattern>
     </rule>
 

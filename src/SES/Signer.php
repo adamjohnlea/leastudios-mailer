@@ -28,6 +28,9 @@ class Signer {
 	 * @param string                $secret_key AWS secret access key.
 	 * @param string                $region     AWS region.
 	 * @param string                $service    AWS service name.
+	 * @param int|null              $timestamp  Unix timestamp to use for X-Amz-Date / credential scope.
+	 *                                          Pass null (the default) to use the current time. Tests pin
+	 *                                          this to get reproducible signatures.
 	 * @return array<string, string> Signed headers (`Authorization`, `X-Amz-Date`, etc.).
 	 */
 	public function sign(
@@ -38,10 +41,12 @@ class Signer {
 		string $access_key,
 		string $secret_key,
 		string $region,
-		string $service = 'ses'
+		string $service = 'ses',
+		?int $timestamp = null
 	): array {
-		$timestamp  = gmdate( 'Ymd\THis\Z' );
-		$date_stamp = gmdate( 'Ymd' );
+		$now        = $timestamp ?? time();
+		$timestamp  = gmdate( 'Ymd\THis\Z', $now );
+		$date_stamp = gmdate( 'Ymd', $now );
 
 		$parsed_url = wp_parse_url( $url );
 		$host       = $parsed_url['host'] ?? '';

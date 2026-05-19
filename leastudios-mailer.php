@@ -95,6 +95,15 @@ function leastudios_mailer_activate(): void {
 			]
 		);
 	}
+
+	// Schedule the log-cleanup cron here so a fresh activation always has
+	// it queued. Plugin::init() also queues it lazily on plugins_loaded as
+	// a safety net for installs that skipped the activation hook (e.g.
+	// dropped-in plugin files), but the activation hook is the canonical
+	// scheduling point.
+	if ( ! wp_next_scheduled( 'leastudios_mailer_cleanup_logs' ) ) {
+		wp_schedule_event( time(), 'daily', 'leastudios_mailer_cleanup_logs' );
+	}
 }
 register_activation_hook( __FILE__, 'leastudios_mailer_activate' );
 

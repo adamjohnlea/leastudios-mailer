@@ -21,6 +21,17 @@ if ( ! file_exists( "{$_tests_dir}/includes/functions.php" ) ) {
 
 require_once "{$_tests_dir}/includes/functions.php";
 
+// Options_Encryptor derives its key from AUTH_KEY and SECURE_AUTH_SALT and
+// will wp_die() if either is missing. wp-tests-config.php doesn't define
+// them by default, so set fixed test values here before WP boots and
+// before the plugin file is loaded.
+if ( ! defined( 'AUTH_KEY' ) ) {
+	define( 'AUTH_KEY', 'lsm-tests-auth-key-do-not-use-in-prod' );
+}
+if ( ! defined( 'SECURE_AUTH_SALT' ) ) {
+	define( 'SECURE_AUTH_SALT', 'lsm-tests-secure-auth-salt-do-not-use-in-prod' );
+}
+
 tests_add_filter(
 	'muplugins_loaded',
 	function () {

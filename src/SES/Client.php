@@ -612,7 +612,15 @@ class Client {
 	}
 
 	/**
-	 * Make a signed HTTP request to SES.
+	 * Make a signed HTTP request to SES with transient-error retry.
+	 *
+	 * Retries on:
+	 *  - `WP_Error` from {@see wp_remote_post()} (connection / timeout / DNS)
+	 *  - HTTP 429 (Throttling) and 5xx (server-side transient failures)
+	 *
+	 * Does NOT retry on 4xx other than 429 — those are configuration errors
+	 * (bad creds, unverified sender, invalid request) that won't resolve
+	 * with a retry and would just delay surfacing the real failure.
 	 *
 	 * @param string                                                        $url         The endpoint URL.
 	 * @param string                                                        $body        The request body.
@@ -620,6 +628,62 @@ class Client {
 	 * @return array{success: bool, message_id: string|null, error: string|null}
 	 */
 	private function make_request( string $url, string $body, array $credentials ): array {
+		/**
+		 * Filter the total number of attempts (initial + retries) for an SES request.
+		 *
+		 * Set to 1 to disable retries. Capped at 1..5.
+		 *
+		 * @param int $max_attempts Default 3.
+		 */
+		$max_attempts = (int) apply_filters( 'leastudios_mailer_ses_max_attempts', 3 );
+		$max_attempts = max( 1, min( 5, $max_attempts ) );
+
+		/**
+		 * Filter the base backoff delay (milliseconds) between retry attempts.
+		 *
+		 * Final delay is `base * 2^attempt + random(0, base/2)` (full jitter).
+		 *
+		 * @param int $base_delay_ms Default 500.
+		 */
+		$base_delay_ms = (int) apply_filters( 'leastudios_mailer_ses_retry_delay_ms', 500 );
+		$base_delay_ms = max( 0, $base_delay_ms );
+
+		$result = [
+			'success'    => false,
+			'message_id' => null,
+			'error'      => __( 'Unknown error.', 'leastudios-mailer' ),
+		];
+
+		for ( $attempt = 1; $attempt <= $max_attempts; $attempt++ ) {
+			$attempt_result = $this->attempt_request( $url, $body, $credentials );
+			$result         = $attempt_result;
+
+			if ( $attempt_result['success'] || ! $attempt_result['retryable'] || $attempt >= $max_attempts ) {
+				break;
+			}
+
+			if ( $base_delay_ms > 0 ) {
+				$delay_ms = $base_delay_ms * ( 2 ** ( $attempt - 1 ) ) + random_int( 0, max( 0, (int) ( $base_delay_ms / 2 ) ) );
+				usleep( $delay_ms * 1000 );
+			}
+		}
+
+		return [
+			'success'    => $result['success'],
+			'message_id' => $result['message_id'],
+			'error'      => $result['error'],
+		];
+	}
+
+	/**
+	 * Perform a single signed POST to SES and classify the outcome.
+	 *
+	 * @param string                                                        $url         The endpoint URL.
+	 * @param string                                                        $body        The request body.
+	 * @param array{access_key: string, secret_key: string, region: string} $credentials The AWS credentials.
+	 * @return array{success: bool, message_id: string|null, error: string|null, retryable: bool}
+	 */
+	private function attempt_request( string $url, string $body, array $credentials ): array {
 		$headers = [ 'Content-Type' => 'application/json' ];
 
 		$signed_headers = $this->signer->sign(
@@ -646,10 +710,11 @@ class Client {
 				'success'    => false,
 				'message_id' => null,
 				'error'      => $response->get_error_message(),
+				'retryable'  => true,
 			];
 		}
 
-		$code          = wp_remote_retrieve_response_code( $response );
+		$code          = (int) wp_remote_retrieve_response_code( $response );
 		$response_body = json_decode( wp_remote_retrieve_body( $response ), true );
 
 		if ( $code >= 200 && $code < 300 ) {
@@ -657,6 +722,7 @@ class Client {
 				'success'    => true,
 				'message_id' => $response_body['MessageId'] ?? null,
 				'error'      => null,
+				'retryable'  => false,
 			];
 		}
 
@@ -669,6 +735,7 @@ class Client {
 				$code,
 				$response_body['message'] ?? __( 'Unknown error.', 'leastudios-mailer' )
 			),
+			'retryable'  => ( 429 === $code || $code >= 500 ),
 		];
 	}
 

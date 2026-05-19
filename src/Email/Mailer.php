@@ -111,13 +111,15 @@ class Mailer {
 		/**
 		 * Filter the full email arguments before sending via SES.
 		 *
-		 * Return null to skip sending the email entirely.
+		 * Return null to drop the email entirely — neither SES nor the default
+		 * WordPress transport will send it. (We short-circuit `pre_wp_mail`
+		 * with `false`, which core treats as "already handled, do not send".)
 		 *
 		 * @param array $args The email arguments with keys: from, to, subject,
 		 *                    body_html, body_text, cc, bcc, reply_to, headers,
 		 *                    attachments.
 		 * @param array $atts The original wp_mail() arguments.
-		 * @return array|null Filtered args, or null to skip sending.
+		 * @return array|null Filtered args, or null to drop the send.
 		 */
 		$filtered_args = apply_filters(
 			'leastudios_mailer_pre_send',
@@ -137,7 +139,7 @@ class Mailer {
 		);
 
 		if ( null === $filtered_args ) {
-			return null;
+			return false;
 		}
 
 		$from        = $filtered_args['from'];
@@ -146,6 +148,15 @@ class Mailer {
 		$body_html   = $filtered_args['body_html'];
 		$body_text   = $filtered_args['body_text'];
 		$attachments = isset( $filtered_args['attachments'] ) ? (array) $filtered_args['attachments'] : [];
+
+		// Re-parse the (possibly filter-overridden) `from` so the raw-send
+		// path and the log entry use the same sender as the Simple path.
+		// Without this, a `leastudios_mailer_pre_send` listener that rewrites
+		// `from` would silently lose its override on attachment-bearing
+		// emails (the raw path takes email + name as separate args).
+		$split      = self::split_from_address( $from );
+		$from_email = $split['email'];
+		$from_name  = $split['name'];
 
 		if ( ! empty( $attachments ) ) {
 			$ses_result = $this->ses_client->send_raw_email(
@@ -340,5 +351,30 @@ class Mailer {
 	 */
 	private static function strip_header_crlf( string $value ): string {
 		return (string) preg_replace( '/[\r\n\x00]+/', '', $value );
+	}
+
+	/**
+	 * Split a `Name <email@host>` or bare `email@host` string into parts.
+	 *
+	 * Mirrors the From-header regex in {@see self::parse_headers()} so the
+	 * Raw send path can recover the same (display-name, address) pair from a
+	 * filter-overridden `from` string.
+	 *
+	 * @param string $from Sender expression: `Name <addr>`, `"Name" <addr>`,
+	 *                     `<addr>`, or `addr`.
+	 * @return array{name: string, email: string}
+	 */
+	private static function split_from_address( string $from ): array {
+		if ( preg_match( '/^\s*(?:"?(?P<name>[^"<]*?)"?\s*)?<(?P<email>[^>]+)>\s*$/', $from, $matches ) ) {
+			return [
+				'name'  => trim( $matches['name'] ),
+				'email' => trim( $matches['email'] ),
+			];
+		}
+
+		return [
+			'name'  => '',
+			'email' => trim( $from ),
+		];
 	}
 }

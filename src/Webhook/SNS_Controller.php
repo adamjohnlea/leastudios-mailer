@@ -217,10 +217,20 @@ class SNS_Controller extends WP_REST_Controller {
 	 * certificate is anchored by the publicly-trusted CA bundle that
 	 * wp_remote_get validates against when fetching SigningCertURL over HTTPS.
 	 *
-	 * @param array<string, mixed> $message The SNS message envelope (Type, Signature, SignatureVersion, SigningCertURL, …).
-	 * @return bool Whether the signature is valid.
+	 * The Timestamp field is checked against the local clock so a captured
+	 * notification body cannot be replayed indefinitely. The window defaults
+	 * to one hour past / five minutes future, and is filterable via
+	 * `leastudios_mailer_sns_max_age_seconds` and
+	 * `leastudios_mailer_sns_future_skew_seconds`.
+	 *
+	 * @param array<string, mixed> $message The SNS message envelope (Type, Signature, SignatureVersion, SigningCertURL, Timestamp, …).
+	 * @return bool Whether the signature is valid and the message is within the replay window.
 	 */
 	private function verify_sns_signature( array $message ): bool {
+		if ( ! $this->is_within_replay_window( $message['Timestamp'] ?? '' ) ) {
+			return false;
+		}
+
 		$signature_version = $message['SignatureVersion'] ?? '';
 		$algorithm         = match ( (string) $signature_version ) {
 			'1'     => OPENSSL_ALGO_SHA1,
@@ -291,6 +301,56 @@ class SNS_Controller extends WP_REST_Controller {
 		}
 
 		return 1 === openssl_verify( $string_to_sign, $signature, $public_key, $algorithm );
+	}
+
+	/**
+	 * Check whether the SNS Timestamp falls within the accepted replay window.
+	 *
+	 * @param mixed $timestamp The ISO 8601 timestamp from the SNS envelope.
+	 * @return bool True if within window. False on missing/malformed timestamp.
+	 */
+	private function is_within_replay_window( mixed $timestamp ): bool {
+		if ( ! is_string( $timestamp ) || '' === $timestamp ) {
+			return false;
+		}
+
+		try {
+			$message_time = new \DateTimeImmutable( $timestamp );
+		} catch ( \Exception $e ) {
+			return false;
+		}
+
+		/**
+		 * Filter the maximum age (seconds) for accepted SNS notifications.
+		 *
+		 * Defaults to one hour. AWS recommends rejecting messages older than
+		 * this to prevent replay of captured notification bodies.
+		 *
+		 * @param int $max_age_seconds Default 3600.
+		 */
+		$max_age_seconds = (int) apply_filters( 'leastudios_mailer_sns_max_age_seconds', HOUR_IN_SECONDS );
+
+		/**
+		 * Filter the clock-skew tolerance (seconds) for future-dated SNS
+		 * notifications. A small forward skew protects against legitimate
+		 * notifications being rejected when the local clock lags AWS.
+		 *
+		 * @param int $future_skew_seconds Default 300.
+		 */
+		$future_skew_seconds = (int) apply_filters( 'leastudios_mailer_sns_future_skew_seconds', 5 * MINUTE_IN_SECONDS );
+
+		$now_ts     = time();
+		$message_ts = $message_time->getTimestamp();
+
+		if ( $message_ts > $now_ts + $future_skew_seconds ) {
+			return false;
+		}
+
+		if ( $message_ts < $now_ts - $max_age_seconds ) {
+			return false;
+		}
+
+		return true;
 	}
 
 	/**

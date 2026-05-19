@@ -25,7 +25,7 @@ class Migration {
 	/**
 	 * The target schema version.
 	 */
-	private const SCHEMA_VERSION = 2;
+	private const SCHEMA_VERSION = 3;
 
 	/**
 	 * Get the email log table name.
@@ -73,6 +73,10 @@ class Migration {
 		if ( $from_version < 2 ) {
 			$this->widen_log_columns( $wpdb );
 		}
+
+		if ( $from_version < 3 ) {
+			$this->widen_subject_column( $wpdb );
+		}
 	}
 
 	/**
@@ -89,7 +93,7 @@ class Migration {
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			to_email text NOT NULL,
 			from_email varchar(255) NOT NULL DEFAULT '',
-			subject varchar(255) NOT NULL DEFAULT '',
+			subject text NOT NULL,
 			status varchar(20) NOT NULL DEFAULT 'sent',
 			message_id varchar(255) DEFAULT NULL,
 			error_message text DEFAULT NULL,
@@ -128,6 +132,24 @@ class Migration {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$wpdb->query( "ALTER TABLE {$table_name} ADD COLUMN from_email varchar(255) NOT NULL DEFAULT '' AFTER to_email, ADD KEY from_email (from_email)" );
 		}
+	}
+
+	/**
+	 * Widen the subject column to TEXT.
+	 *
+	 * The original `varchar(255)` silently truncated long subject lines (or
+	 * failed under strict SQL mode). Widening to TEXT brings subject in line
+	 * with `to_email` and removes a class of "where did my audit row go?"
+	 * surprises.
+	 *
+	 * @param \wpdb $wpdb WordPress database abstraction.
+	 * @return void
+	 */
+	private function widen_subject_column( \wpdb $wpdb ): void {
+		$table_name = self::get_table_name();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "ALTER TABLE {$table_name} MODIFY COLUMN subject text NOT NULL" );
 	}
 
 	/**

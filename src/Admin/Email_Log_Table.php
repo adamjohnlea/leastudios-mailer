@@ -145,10 +145,14 @@ class Email_Log_Table extends \WP_List_Table {
 			return '—';
 		}
 
+		$display = strlen( $item->message_id ) > 20
+			? substr( $item->message_id, 0, 20 ) . '…'
+			: $item->message_id;
+
 		return sprintf(
 			'<code title="%s" style="font-size:11px;">%s</code>',
 			esc_attr( $item->message_id ),
-			esc_html( substr( $item->message_id, 0, 20 ) . '…' )
+			esc_html( $display )
 		);
 	}
 
@@ -205,10 +209,15 @@ class Email_Log_Table extends \WP_List_Table {
 			'complained' => __( 'Complained', 'leastudios-mailer' ),
 		];
 
+		// Single GROUP BY query instead of one COUNT(*) per status — keeps
+		// the view counts cheap as the log table grows.
+		$counts_by_status = $this->logger->get_counts_by_status();
+		$total            = array_sum( $counts_by_status );
+
 		$views = [];
 
 		foreach ( $statuses as $slug => $label ) {
-			$count = $this->logger->get_total_count( '' === $slug ? null : $slug );
+			$count = '' === $slug ? $total : ( $counts_by_status[ $slug ] ?? 0 );
 			$url   = '' === $slug ? $base : $base . '&status=' . $slug;
 			$class = ( $current === $slug ) ? 'current' : '';
 

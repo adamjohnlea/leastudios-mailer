@@ -108,10 +108,45 @@ class Settings_Page {
 		add_action( 'admin_menu', [ $this, 'add_menu_page' ] );
 		add_action( 'admin_init', [ $this, 'register_settings' ] );
 		add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets' ] );
+		add_action( 'admin_notices', [ $this, 'maybe_render_decrypt_failure_notice' ] );
 
 		add_action( 'wp_ajax_leastudios_mailer_send_test', [ $this, 'handle_send_test' ] );
 		add_action( 'wp_ajax_leastudios_mailer_health_check', [ $this, 'handle_health_check' ] );
 		add_action( 'wp_ajax_leastudios_mailer_delete_log', [ $this, 'handle_delete_log' ] );
+	}
+
+	/**
+	 * Render an admin notice when stored credentials cannot be decrypted.
+	 *
+	 * Almost always caused by a rotated `AUTH_KEY` or `SECURE_AUTH_SALT` in
+	 * wp-config.php — without this notice the symptom is a silent
+	 * "credentials not configured" error on every send. We display the
+	 * notice only to users who can fix the problem and only on our own
+	 * settings page to avoid wallpapering the rest of wp-admin.
+	 *
+	 * @return void
+	 */
+	public function maybe_render_decrypt_failure_notice(): void {
+		if ( ! current_user_can( self::CAPABILITY ) ) {
+			return;
+		}
+
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( null === $screen || $screen->id !== $this->hook_suffix ) {
+			return;
+		}
+
+		if ( ! get_transient( Options_Encryptor::DECRYPT_FAILURE_TRANSIENT ) ) {
+			return;
+		}
+
+		delete_transient( Options_Encryptor::DECRYPT_FAILURE_TRANSIENT );
+
+		printf(
+			'<div class="notice notice-error"><p><strong>%s</strong> %s</p></div>',
+			esc_html__( 'leaStudios Mailer:', 'leastudios-mailer' ),
+			esc_html__( 'Stored AWS credentials could not be decrypted. This usually means AUTH_KEY or SECURE_AUTH_SALT in wp-config.php changed since the credentials were saved. Re-enter your Access Key ID and Secret Access Key below to restore mail delivery.', 'leastudios-mailer' )
+		);
 	}
 
 	/**
@@ -538,10 +573,11 @@ class Settings_Page {
 			wp_send_json_error( __( 'Please enter a valid email address.', 'leastudios-mailer' ) );
 		}
 
-		$options = get_option( self::OPTION_NAME, [] );
-		$from    = $options['from_email'] ?? get_option( 'admin_email' );
+		$options   = get_option( self::OPTION_NAME, [] );
+		$from      = $options['from_email'] ?? get_option( 'admin_email' );
+		$from_name = (string) ( $options['from_name'] ?? '' );
 
-		$result = $this->health_check->send_test_email( $to, $from );
+		$result = $this->health_check->send_test_email( $to, $from, $from_name );
 
 		if ( $result['success'] ) {
 			wp_send_json_success(
