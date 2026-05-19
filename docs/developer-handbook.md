@@ -2,7 +2,7 @@
 
 ## Hooks Reference
 
-All hooks are prefixed with `leastudios_mailer_` and are designed to let developers customise every stage of the email pipeline — from interception, through SES delivery, to logging and admin UI.
+All hooks are prefixed with `leastudios_mailer_` and are designed to let developers customise every stage of the pipeline — from interception, through SES delivery (including retry behaviour), to logging, the inbound delivery-tracking webhook, and the admin UI.
 
 ---
 
@@ -51,7 +51,7 @@ add_filter( 'leastudios_mailer_should_intercept', function ( bool $should_interc
 
 **Return:** Filtered `$args` array, or `null` to skip sending entirely.
 
-**Description:** Fires just before the email is handed to the SES client. Use it to modify any part of the email (recipients, body, headers) or return `null` to silently cancel delivery.
+**Description:** Fires just before the email is handed to the SES client. Use it to modify any part of the email (recipients, body, headers) or return `null` to silently cancel delivery. Returning `null` drops the email entirely — the mailer short-circuits `pre_wp_mail`, so WordPress does **not** fall back to its default transport.
 
 **Example:**
 ```php
@@ -132,6 +132,44 @@ add_filter( 'leastudios_mailer_ses_raw_request_body', function ( array $body, st
 
 ---
 
+#### `leastudios_mailer_ses_max_attempts`
+
+**Type:** Filter
+**Location:** `src/SES/Client.php`
+**Parameters:**
+- `$max_attempts` *(int)* — Total number of attempts (initial request + retries) for a single SES API call. Default `3`. The returned value is clamped to the range `1`–`5`; return `1` to disable retries entirely.
+
+**Description:** Controls how many times the SES client will attempt a request before giving up. Retries happen only on *transient* failures — a `WP_Error` from `wp_remote_post()` (connection, timeout, DNS) or an HTTP `429` / `5xx` response. Other `4xx` responses (bad credentials, unverified sender, malformed request) are configuration errors and fail immediately without retry.
+
+**Example:**
+```php
+add_filter( 'leastudios_mailer_ses_max_attempts', function ( int $max_attempts ): int {
+    // Be more persistent on a flaky network — clamped to 5 internally.
+    return 5;
+} );
+```
+
+---
+
+#### `leastudios_mailer_ses_retry_delay_ms`
+
+**Type:** Filter
+**Location:** `src/SES/Client.php`
+**Parameters:**
+- `$base_delay_ms` *(int)* — Base backoff delay, in milliseconds, between SES retry attempts. Default `500`. Negative values are floored to `0`.
+
+**Description:** Sets the base delay for the exponential-backoff-with-jitter wait between retry attempts. The delay before retry *n* is `base × 2^(n−1)` plus random "full jitter" of `0`–`base/2` ms — so with the `500` default, waits land around 0.5s, 1s, 2s, …. The jitter spreads retries out so multiple failing sends don't all hammer SES in lockstep. Return `0` to retry with no delay. Has no effect when `leastudios_mailer_ses_max_attempts` is `1`.
+
+**Example:**
+```php
+add_filter( 'leastudios_mailer_ses_retry_delay_ms', function ( int $base_delay_ms ): int {
+    // Slower, gentler backoff.
+    return 1000;
+} );
+```
+
+---
+
 #### `leastudios_mailer_before_log`
 
 **Type:** Filter
@@ -198,6 +236,44 @@ add_action( 'leastudios_mailer_settings_tab_analytics', function () {
 
 ---
 
+#### `leastudios_mailer_sns_max_age_seconds`
+
+**Type:** Filter
+**Location:** `src/Webhook/SNS_Controller.php`
+**Parameters:**
+- `$max_age_seconds` *(int)* — Maximum age, in seconds, of an SNS notification the webhook will accept. Default `3600` (one hour).
+
+**Description:** Part of the SNS webhook's replay protection. A notification whose `Timestamp` is older than this window is rejected during signature verification, so a captured notification body cannot be replayed against the endpoint indefinitely. This filter applies to the **inbound** delivery-tracking webhook, not the `wp_mail()` send pipeline.
+
+**Example:**
+```php
+add_filter( 'leastudios_mailer_sns_max_age_seconds', function ( int $max_age_seconds ): int {
+    // Tighten the replay window to 15 minutes.
+    return 15 * MINUTE_IN_SECONDS;
+} );
+```
+
+---
+
+#### `leastudios_mailer_sns_future_skew_seconds`
+
+**Type:** Filter
+**Location:** `src/Webhook/SNS_Controller.php`
+**Parameters:**
+- `$future_skew_seconds` *(int)* — How far into the future, in seconds, an SNS notification's `Timestamp` may be and still be accepted. Default `300` (five minutes).
+
+**Description:** The forward half of the SNS webhook's replay window. A small tolerance prevents legitimate notifications from being rejected when the local server clock lags behind AWS; notifications timestamped further ahead than this are rejected. Like `leastudios_mailer_sns_max_age_seconds`, this applies to the inbound delivery-tracking webhook.
+
+**Example:**
+```php
+add_filter( 'leastudios_mailer_sns_future_skew_seconds', function ( int $future_skew_seconds ): int {
+    // Allow more slack on a server with known clock drift.
+    return 10 * MINUTE_IN_SECONDS;
+} );
+```
+
+---
+
 ### Actions
 
 #### `leastudios_mailer_email_sent`
@@ -259,7 +335,7 @@ add_action( 'leastudios_mailer_attachments_skipped', function ( array $skipped )
 - `$url` *(string)* — The SES API endpoint URL that was called.
 - `$body` *(string)* — The JSON request body that was sent.
 
-**Description:** Fires immediately after the SES API response is received, before the result is returned to the mailer. Useful for low-level debugging, metrics collection, or forwarding results to external monitoring services.
+**Description:** Fires immediately after the SES API response is received, before the result is returned to the mailer. Useful for low-level debugging, metrics collection, or forwarding results to external monitoring services. When retries occur (see `leastudios_mailer_ses_max_attempts`), this fires **once** with the final result — not once per attempt.
 
 **Example:**
 ```php
@@ -332,9 +408,12 @@ When `wp_mail()` is called and the mailer is enabled, hooks fire in this order:
 3. **`leastudios_mailer_attachments_skipped`** — Only if one or more attachments were unreadable and had to be dropped.
 4. **`leastudios_mailer_pre_send`** — Final chance to modify or cancel the email (including the validated `attachments` list).
 5. **`leastudios_mailer_ses_request_body`** *(no-attachment send)* or **`leastudios_mailer_ses_raw_request_body`** *(attachment send)* — Modify the SES API payload.
-6. **`leastudios_mailer_ses_response`** — React to the SES API response.
-7. **`leastudios_mailer_before_log`** — Filter or suppress the log entry.
-8. **`leastudios_mailer_email_sent`** — Post-send action for notifications or logging.
+6. **`leastudios_mailer_ses_max_attempts`** / **`leastudios_mailer_ses_retry_delay_ms`** — Read once before the first SES attempt to size the retry budget and backoff.
+7. **`leastudios_mailer_ses_response`** — React to the SES API response. Fires once, after the final attempt, even when retries occurred.
+8. **`leastudios_mailer_before_log`** — Filter or suppress the log entry.
+9. **`leastudios_mailer_email_sent`** — Post-send action for notifications or logging.
+
+The SNS webhook filters — **`leastudios_mailer_sns_max_age_seconds`** and **`leastudios_mailer_sns_future_skew_seconds`** — are not part of this sequence. They fire only on the inbound delivery-tracking webhook (`leastudios-mailer/v1`) when Amazon SNS posts a bounce/complaint/delivery notification, independently of any `wp_mail()` call.
 
 ## Attachments
 
