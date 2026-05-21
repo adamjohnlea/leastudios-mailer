@@ -62,6 +62,14 @@ class SNS_Controller extends WP_REST_Controller {
 	 * @return true|WP_Error
 	 */
 	public function verify_request( WP_REST_Request $request ) {
+		if ( $this->is_rate_limited() ) {
+			return new WP_Error(
+				'rate_limited',
+				__( 'Too many requests.', 'leastudios-mailer' ),
+				[ 'status' => 429 ]
+			);
+		}
+
 		$body = $request->get_json_params();
 
 		if ( empty( $body ) || ! isset( $body['Type'] ) ) {
@@ -81,6 +89,52 @@ class SNS_Controller extends WP_REST_Controller {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Determine whether the calling IP has exceeded the webhook rate limit.
+	 *
+	 * Fixed-window counter: the transient key embeds a time bucket, so the
+	 * transient's TTL is always exactly the window and no TTL-preservation
+	 * is needed. The benign read-increment-write race under concurrency is
+	 * acceptable for a rate limiter. The check runs before signature
+	 * verification so a flood cannot drive repeated certificate fetches.
+	 *
+	 * @return bool True when the request should be rejected with HTTP 429.
+	 */
+	private function is_rate_limited(): bool {
+		/**
+		 * Filter the maximum SNS webhook requests allowed per window, per IP.
+		 *
+		 * Return 0 or less to disable webhook rate limiting entirely.
+		 *
+		 * @param int $limit Default 120.
+		 */
+		$limit = (int) apply_filters( 'leastudios_mailer_sns_rate_limit', 120 );
+
+		if ( $limit <= 0 ) {
+			return false;
+		}
+
+		/**
+		 * Filter the SNS webhook rate-limit window, in seconds.
+		 *
+		 * @param int $window_seconds Default 60.
+		 */
+		$window = (int) apply_filters( 'leastudios_mailer_sns_rate_window_seconds', MINUTE_IN_SECONDS );
+		$window = max( 1, $window );
+
+		$ip = isset( $_SERVER['REMOTE_ADDR'] )
+			? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) )
+			: '';
+
+		$bucket = (int) floor( time() / $window );
+		$key    = 'leastudios_mailer_sns_rl_' . $bucket . '_' . md5( $ip );
+
+		$count = (int) get_transient( $key ) + 1;
+		set_transient( $key, $count, $window );
+
+		return $count > $limit;
 	}
 
 	/**

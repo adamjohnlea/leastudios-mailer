@@ -54,6 +54,7 @@ class SNS_ControllerTest extends TestCase {
 
 	public function tear_down(): void {
 		delete_transient( 'leastudios_mailer_sns_cert_' . md5( self::CERT_URL ) );
+		unset( $_SERVER['REMOTE_ADDR'] );
 		parent::tear_down();
 	}
 
@@ -162,6 +163,38 @@ class SNS_ControllerTest extends TestCase {
 		$message = $this->signed_subscription_confirmation();
 
 		$this->assertTrue( $this->controller->verify_request( $this->build_request( $message ) ) );
+	}
+
+	public function test_requests_under_the_rate_limit_pass(): void {
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.10';
+
+		add_filter( 'leastudios_mailer_sns_rate_limit', static fn(): int => 5 );
+
+		$message = $this->signed_notification();
+
+		// Three requests, all within the limit of 5.
+		for ( $i = 0; $i < 3; $i++ ) {
+			$this->assertTrue( $this->controller->verify_request( $this->build_request( $message ) ) );
+		}
+	}
+
+	public function test_requests_over_the_rate_limit_return_429(): void {
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.20';
+
+		add_filter( 'leastudios_mailer_sns_rate_limit', static fn(): int => 2 );
+
+		$message = $this->signed_notification();
+
+		// The first two requests are within the limit.
+		$this->controller->verify_request( $this->build_request( $message ) );
+		$this->controller->verify_request( $this->build_request( $message ) );
+
+		// The third exceeds it and is rejected before signature checks run.
+		$result = $this->controller->verify_request( $this->build_request( $message ) );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'rate_limited', $result->get_error_code() );
+		$this->assertSame( 429, $result->get_error_data()['status'] );
 	}
 
 	/**
