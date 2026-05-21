@@ -180,16 +180,17 @@ class Client {
 		 *
 		 * @param int $max_bytes Default 40 * MB_IN_BYTES (40 MB).
 		 */
-		$max_bytes = (int) apply_filters( 'leastudios_mailer_max_message_bytes', 40 * MB_IN_BYTES );
+		$max_bytes    = (int) apply_filters( 'leastudios_mailer_max_message_bytes', 40 * MB_IN_BYTES );
+		$message_size = strlen( $raw_message );
 
-		if ( $max_bytes > 0 && strlen( $raw_message ) > $max_bytes ) {
+		if ( $max_bytes > 0 && $message_size > $max_bytes ) {
 			return [
 				'success'    => false,
 				'message_id' => null,
 				'error'      => sprintf(
 					/* translators: 1: actual message size, 2: configured size limit. */
 					__( 'Message size (%1$s) exceeds the %2$s limit; not sent to SES.', 'leastudios-mailer' ),
-					(string) size_format( strlen( $raw_message ) ),
+					(string) size_format( $message_size ),
 					(string) size_format( $max_bytes )
 				),
 			];

@@ -207,6 +207,26 @@ class ClientTest extends TestCase {
 		$this->assertStringContainsString( 'exceeds', (string) $result['error'] );
 	}
 
+	public function test_size_limit_of_zero_disables_the_check(): void {
+		$this->stub_send_endpoint();
+
+		// A limit of 0 disables the check — even a message that would exceed
+		// any positive cap is dispatched.
+		add_filter( 'leastudios_mailer_max_message_bytes', static fn(): int => 0 );
+
+		$result = $this->client->send_raw_email(
+			'sender@example.com',
+			'Sender',
+			[ 'recipient@example.com' ],
+			'Subject',
+			'',
+			'Body text'
+		);
+
+		$this->assertTrue( $result['success'] );
+		$this->assertSame( 'within-limit-msg', $result['message_id'] );
+	}
+
 	public function test_send_raw_email_within_the_size_limit_dispatches_to_ses(): void {
 		$this->stub_send_endpoint();
 
