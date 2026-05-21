@@ -274,6 +274,44 @@ add_filter( 'leastudios_mailer_sns_future_skew_seconds', function ( int $future_
 
 ---
 
+#### `leastudios_mailer_sns_rate_limit`
+
+**Type:** Filter
+**Location:** `src/Webhook/SNS_Controller.php`
+**Parameters:**
+- `$limit` *(int)* — Maximum number of webhook requests accepted per window, per client IP. Default `120`. Return `0` (or less) to disable rate limiting entirely.
+
+**Description:** Caps how many requests a single IP may make to the SNS delivery-tracking webhook (`leastudios-mailer/v1/sns-webhook`) within the rate-limit window. The check runs before signature verification, so a flood of junk requests cannot drive repeated signing-certificate fetches or signature checks. A request over the limit receives HTTP `429`. Applies to the inbound webhook only, not the `wp_mail()` send pipeline.
+
+**Example:**
+```php
+add_filter( 'leastudios_mailer_sns_rate_limit', function ( int $limit ): int {
+    // Tighten to 30 requests per window.
+    return 30;
+} );
+```
+
+---
+
+#### `leastudios_mailer_sns_rate_window_seconds`
+
+**Type:** Filter
+**Location:** `src/Webhook/SNS_Controller.php`
+**Parameters:**
+- `$window_seconds` *(int)* — Length of the rate-limit window, in seconds. Default `60`.
+
+**Description:** Sets the window over which `leastudios_mailer_sns_rate_limit` requests are counted. With the defaults, an IP may make 120 webhook requests per 60 seconds. Applies to the inbound delivery-tracking webhook only.
+
+**Example:**
+```php
+add_filter( 'leastudios_mailer_sns_rate_window_seconds', function ( int $window_seconds ): int {
+    // Count requests over a 5-minute window instead of 1 minute.
+    return 5 * MINUTE_IN_SECONDS;
+} );
+```
+
+---
+
 ### Actions
 
 #### `leastudios_mailer_email_sent`
@@ -413,7 +451,7 @@ When `wp_mail()` is called and the mailer is enabled, hooks fire in this order:
 8. **`leastudios_mailer_before_log`** — Filter or suppress the log entry.
 9. **`leastudios_mailer_email_sent`** — Post-send action for notifications or logging.
 
-The SNS webhook filters — **`leastudios_mailer_sns_max_age_seconds`** and **`leastudios_mailer_sns_future_skew_seconds`** — are not part of this sequence. They fire only on the inbound delivery-tracking webhook (`leastudios-mailer/v1`) when Amazon SNS posts a bounce/complaint/delivery notification, independently of any `wp_mail()` call.
+The SNS webhook filters — **`leastudios_mailer_sns_rate_limit`**, **`leastudios_mailer_sns_rate_window_seconds`**, **`leastudios_mailer_sns_max_age_seconds`**, and **`leastudios_mailer_sns_future_skew_seconds`** — are not part of this sequence. They fire only on the inbound delivery-tracking webhook (`leastudios-mailer/v1`) when Amazon SNS posts a bounce/complaint/delivery notification, independently of any `wp_mail()` call.
 
 ## Attachments
 
