@@ -132,6 +132,25 @@ add_filter( 'leastudios_mailer_ses_raw_request_body', function ( array $body, st
 
 ---
 
+#### `leastudios_mailer_max_message_bytes`
+
+**Type:** Filter
+**Location:** `src/SES/Client.php`
+**Parameters:**
+- `$max_bytes` *(int)* — The maximum size, in bytes, of a message sent through SES. Default `40 * MB_IN_BYTES` (40 MB, Amazon SES's documented limit). Return `0` or less to disable the check.
+
+**Description:** Caps the size of an attachment-bearing email. After the RFC 5322 MIME message is assembled, its byte length is compared against this limit; a message over the limit is **not** sent — `send_raw_email()` returns a failure and the email is recorded in the log as `failed` with a "message size exceeds limit" error. This turns an oversized send into a clear, early failure instead of an opaque SES API rejection. Applies to the Raw (attachment) send path only — the no-attachment `Content.Simple` path is body-only and is not checked.
+
+**Example:**
+```php
+add_filter( 'leastudios_mailer_max_message_bytes', function ( int $max_bytes ): int {
+    // Tighten the cap to 10 MB.
+    return 10 * MB_IN_BYTES;
+} );
+```
+
+---
+
 #### `leastudios_mailer_ses_max_attempts`
 
 **Type:** Filter
@@ -445,7 +464,7 @@ When `wp_mail()` is called and the mailer is enabled, hooks fire in this order:
 2. `wp_mail_from` / `wp_mail_from_name` — Standard WordPress sender filters.
 3. **`leastudios_mailer_attachments_skipped`** — Only if one or more attachments were unreadable and had to be dropped.
 4. **`leastudios_mailer_pre_send`** — Final chance to modify or cancel the email (including the validated `attachments` list).
-5. **`leastudios_mailer_ses_request_body`** *(no-attachment send)* or **`leastudios_mailer_ses_raw_request_body`** *(attachment send)* — Modify the SES API payload.
+5. **`leastudios_mailer_ses_request_body`** *(no-attachment send)* or **`leastudios_mailer_ses_raw_request_body`** *(attachment send)* — Modify the SES API payload. On the attachment send, **`leastudios_mailer_max_message_bytes`** is also read at this stage to enforce the SES message-size limit before the payload is dispatched.
 6. **`leastudios_mailer_ses_max_attempts`** / **`leastudios_mailer_ses_retry_delay_ms`** — Read once before the first SES attempt to size the retry budget and backoff.
 7. **`leastudios_mailer_ses_response`** — React to the SES API response. Fires once, after the final attempt, even when retries occurred.
 8. **`leastudios_mailer_before_log`** — Filter or suppress the log entry.
