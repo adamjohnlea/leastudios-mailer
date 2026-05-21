@@ -263,9 +263,15 @@ class Client {
 	}
 
 	/**
-	 * Check if a sender email identity is verified in SES.
+	 * Check whether a sender address is a verified SES sending identity.
 	 *
-	 * @param string $email The email address to check.
+	 * SES authorises a `From` address when *either* the address itself or
+	 * its domain is a verified identity, so this checks both: the address
+	 * first, then — if the address is not verified — the domain (the part
+	 * after the `@`). A site that verified its whole domain in SES, rather
+	 * than each individual address, therefore still reports as healthy.
+	 *
+	 * @param string $email The sender email address to check.
 	 * @return array{verified: bool, error: string|null}
 	 */
 	public function check_sender_identity( string $email ): array {
@@ -278,9 +284,65 @@ class Client {
 			];
 		}
 
-		$identity = rawurlencode( $email );
-		$url      = "https://email.{$credentials['region']}.amazonaws.com/v2/email/identities/{$identity}";
-		$headers  = [ 'Content-Type' => 'application/json' ];
+		$email_status = $this->fetch_identity( $email, $credentials );
+
+		if ( $email_status['verified'] ) {
+			return [
+				'verified' => true,
+				'error'    => null,
+			];
+		}
+
+		// A failure other than "identity not found" (404) — a network error,
+		// access denied, a 5xx — is a real problem that the domain lookup
+		// would just hit again. Surface it rather than masking it behind a
+		// generic "sender not verified" message.
+		if ( 200 !== $email_status['http_code'] && 404 !== $email_status['http_code'] ) {
+			return [
+				'verified' => false,
+				'error'    => $email_status['error'],
+			];
+		}
+
+		$at_position = strrpos( $email, '@' );
+		$domain      = false === $at_position ? '' : substr( $email, $at_position + 1 );
+
+		if ( '' === $domain ) {
+			return [
+				'verified' => false,
+				'error'    => $email_status['error'],
+			];
+		}
+
+		$domain_status = $this->fetch_identity( $domain, $credentials );
+
+		if ( $domain_status['verified'] ) {
+			return [
+				'verified' => true,
+				'error'    => null,
+			];
+		}
+
+		return [
+			'verified' => false,
+			'error'    => $this->unverified_sender_message( $email, $domain, $email_status, $domain_status ),
+		];
+	}
+
+	/**
+	 * Fetch the SES verification status of a single identity.
+	 *
+	 * The identity may be an email address or a domain — SES's
+	 * `GetEmailIdentity` accepts either.
+	 *
+	 * @param string                                                        $identity    The identity (email address or domain).
+	 * @param array{access_key: string, secret_key: string, region: string} $credentials The AWS credentials.
+	 * @return array{verified: bool, error: string|null, http_code: int|null}
+	 */
+	private function fetch_identity( string $identity, array $credentials ): array {
+		$encoded = rawurlencode( $identity );
+		$url     = "https://email.{$credentials['region']}.amazonaws.com/v2/email/identities/{$encoded}";
+		$headers = [ 'Content-Type' => 'application/json' ];
 
 		$signed_headers = $this->signer->sign(
 			'GET',
@@ -302,27 +364,66 @@ class Client {
 
 		if ( is_wp_error( $response ) ) {
 			return [
-				'verified' => false,
-				'error'    => $response->get_error_message(),
+				'verified'  => false,
+				'error'     => $response->get_error_message(),
+				'http_code' => null,
 			];
 		}
 
-		$code = wp_remote_retrieve_response_code( $response );
+		$code = (int) wp_remote_retrieve_response_code( $response );
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 
 		if ( 200 !== $code ) {
 			return [
-				'verified' => false,
-				'error'    => $body['message'] ?? __( 'Identity not found.', 'leastudios-mailer' ),
+				'verified'  => false,
+				'error'     => is_array( $body ) && isset( $body['message'] )
+					? (string) $body['message']
+					: __( 'Identity not found.', 'leastudios-mailer' ),
+				'http_code' => $code,
 			];
 		}
 
-		$verified = ( $body['VerifiedForSendingStatus'] ?? false ) === true;
+		$verified = is_array( $body ) && true === ( $body['VerifiedForSendingStatus'] ?? false );
 
 		return [
-			'verified' => $verified,
-			'error'    => $verified ? null : __( 'Identity exists but is not verified for sending.', 'leastudios-mailer' ),
+			'verified'  => $verified,
+			'error'     => $verified ? null : __( 'Identity exists but is not verified for sending.', 'leastudios-mailer' ),
+			'http_code' => 200,
 		];
+	}
+
+	/**
+	 * Build a human-readable message explaining why a sender is not verified.
+	 *
+	 * @param string                                                         $email         The sender address.
+	 * @param string                                                         $domain        The sender domain.
+	 * @param array{verified: bool, error: string|null, http_code: int|null} $email_status  Result of the address identity lookup.
+	 * @param array{verified: bool, error: string|null, http_code: int|null} $domain_status Result of the domain identity lookup.
+	 * @return string
+	 */
+	private function unverified_sender_message( string $email, string $domain, array $email_status, array $domain_status ): string {
+		if ( 200 === $domain_status['http_code'] ) {
+			return sprintf(
+				/* translators: %s: sender domain. */
+				__( 'The domain %s is registered in SES but is not verified for sending yet.', 'leastudios-mailer' ),
+				$domain
+			);
+		}
+
+		if ( 200 === $email_status['http_code'] ) {
+			return sprintf(
+				/* translators: %s: sender email address. */
+				__( 'The address %s is registered in SES but is not verified for sending yet.', 'leastudios-mailer' ),
+				$email
+			);
+		}
+
+		return sprintf(
+			/* translators: 1: sender email address, 2: sender domain. */
+			__( 'Neither the address %1$s nor its domain %2$s is a verified SES sender identity.', 'leastudios-mailer' ),
+			$email,
+			$domain
+		);
 	}
 
 	/**
