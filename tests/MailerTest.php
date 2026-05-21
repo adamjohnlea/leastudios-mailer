@@ -552,4 +552,47 @@ class MailerTest extends TestCase {
 			]
 		);
 	}
+
+	public function test_skipped_attachment_is_recorded_in_the_email_log(): void {
+		update_option(
+			'leastudios_mailer_options',
+			[
+				'enabled'    => true,
+				'from_email' => 'sender@example.com',
+			]
+		);
+
+		// The only attachment is unreadable, so it is dropped and the email
+		// goes out via the Simple path with no attachments.
+		$this->ses_client->method( 'send_email' )->willReturn(
+			[
+				'success'    => true,
+				'message_id' => 'simple-msg',
+				'error'      => '',
+			]
+		);
+
+		// The log entry must carry a note naming the dropped attachment,
+		// even though the email itself was sent successfully.
+		$this->logger->expects( $this->once() )
+			->method( 'log' )
+			->with(
+				$this->anything(),
+				$this->anything(),
+				$this->equalTo( 'sent' ),
+				$this->anything(),
+				$this->stringContains( 'missing.pdf' )
+			);
+
+		$this->mailer->send(
+			null,
+			[
+				'to'          => 'recipient@example.com',
+				'subject'     => 'Missing Attachment',
+				'message'     => 'Hi',
+				'headers'     => [],
+				'attachments' => [ 'missing.pdf' => '/tmp/lsm-does-not-exist-' . uniqid() . '.pdf' ],
+			]
+		);
+	}
 }

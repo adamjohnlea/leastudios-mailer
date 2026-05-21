@@ -106,7 +106,9 @@ class Mailer {
 		$body_text = $is_html ? '' : $message;
 
 		$raw_attachments = isset( $atts['attachments'] ) ? (array) $atts['attachments'] : [];
-		$attachments     = $this->normalize_attachments( $raw_attachments );
+		$normalized      = $this->normalize_attachments( $raw_attachments );
+		$attachments     = $normalized['attachments'];
+		$skipped         = $normalized['skipped'];
 
 		/**
 		 * Filter the full email arguments before sending via SES.
@@ -192,7 +194,7 @@ class Mailer {
 			$subject,
 			$status,
 			$ses_result['message_id'],
-			$ses_result['error'],
+			$this->log_error_message( $ses_result['error'], $skipped ),
 			$from_email
 		);
 
@@ -222,11 +224,14 @@ class Mailer {
 	 * log or alert on them.
 	 *
 	 * @param array<int|string, mixed> $attachments Raw attachments array.
-	 * @return array<int, array{name: string, path: string}> Validated attachments.
+	 * @return array{attachments: array<int, array{name: string, path: string}>, skipped: array<int|string, mixed>} The validated attachments plus the entries that were skipped.
 	 */
 	private function normalize_attachments( array $attachments ): array {
 		if ( empty( $attachments ) ) {
-			return [];
+			return [
+				'attachments' => [],
+				'skipped'     => [],
+			];
 		}
 
 		$normalized = [];
@@ -263,7 +268,74 @@ class Mailer {
 			do_action( 'leastudios_mailer_attachments_skipped', $skipped );
 		}
 
-		return $normalized;
+		return [
+			'attachments' => $normalized,
+			'skipped'     => $skipped,
+		];
+	}
+
+	/**
+	 * Combine the SES send error (if any) with a note about skipped
+	 * attachments into the single message stored in the email log.
+	 *
+	 * @param string|null              $ses_error The SES send error, or null on success.
+	 * @param array<int|string, mixed> $skipped Attachment entries that were dropped.
+	 * @return string|null The combined message, or null when there is nothing to record.
+	 */
+	private function log_error_message( ?string $ses_error, array $skipped ): ?string {
+		$note = $this->skipped_attachments_note( $skipped );
+
+		if ( '' === $note ) {
+			return $ses_error;
+		}
+
+		if ( null === $ses_error || '' === $ses_error ) {
+			return $note;
+		}
+
+		return $ses_error . ' ' . $note;
+	}
+
+	/**
+	 * Build a human-readable note naming the attachments that were skipped.
+	 *
+	 * For the keyed `wp_mail()` form the array key is the caller's intended
+	 * display name and is used directly; for the legacy indexed form the
+	 * file's base name is used instead.
+	 *
+	 * @param array<int|string, mixed> $skipped Attachment entries that were dropped.
+	 * @return string The note, or an empty string when nothing was skipped.
+	 */
+	private function skipped_attachments_note( array $skipped ): string {
+		if ( empty( $skipped ) ) {
+			return '';
+		}
+
+		$names = [];
+
+		foreach ( $skipped as $key => $value ) {
+			if ( is_string( $key ) && '' !== $key && ! ctype_digit( $key ) ) {
+				$names[] = $key;
+			} elseif ( is_string( $value ) && '' !== $value ) {
+				$names[] = basename( $value );
+			} else {
+				$names[] = __( '(invalid entry)', 'leastudios-mailer' );
+			}
+		}
+
+		$count = count( $names );
+
+		return sprintf(
+			/* translators: 1: number of attachments, 2: comma-separated list of filenames. */
+			_n(
+				'%1$d attachment could not be read and was not sent: %2$s',
+				'%1$d attachments could not be read and were not sent: %2$s',
+				$count,
+				'leastudios-mailer'
+			),
+			$count,
+			implode( ', ', $names )
+		);
 	}
 
 	/**
