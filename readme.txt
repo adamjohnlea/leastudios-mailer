@@ -4,7 +4,7 @@ Tags: email, ses, amazon ses, smtp, email log
 Requires at least: 6.4
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 1.1.0
+Stable tag: 1.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -51,6 +51,9 @@ The plugin returns null from the `pre_wp_mail` filter, which lets WordPress fall
 leaStudios Mailer replaces the email transport layer. It is not compatible with other SMTP or email transport plugins that also hook `pre_wp_mail`. It works alongside plugins that compose emails via `wp_mail()` (like contact form plugins).
 
 == Changelog ==
+
+= 1.1.1 =
+* Fixed the setup health check reporting a domain-verified sender as "does not exist". The sender identity check now recognises Amazon SES domain verification, not just individually verified email addresses.
 
 = 1.1.0 =
 * Added AWS credential format validation — malformed Access Key IDs and Secret Access Keys are rejected at save time with an admin notice instead of failing later as an opaque SES authentication error.
