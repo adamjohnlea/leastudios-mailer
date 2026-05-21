@@ -595,4 +595,49 @@ class MailerTest extends TestCase {
 			]
 		);
 	}
+
+	public function test_skipped_indexed_attachment_is_named_by_basename_in_the_log(): void {
+		update_option(
+			'leastudios_mailer_options',
+			[
+				'enabled'    => true,
+				'from_email' => 'sender@example.com',
+			]
+		);
+
+		$missing = '/tmp/lsm-missing-' . uniqid() . '.pdf';
+
+		// The only attachment is unreadable, so it is dropped and the email
+		// goes out via the Simple path with no attachments.
+		$this->ses_client->method( 'send_email' )->willReturn(
+			[
+				'success'    => true,
+				'message_id' => 'simple-msg',
+				'error'      => '',
+			]
+		);
+
+		// Legacy indexed attachment form: there is no display-name key, so
+		// the log note must name the dropped file by its base name.
+		$this->logger->expects( $this->once() )
+			->method( 'log' )
+			->with(
+				$this->anything(),
+				$this->anything(),
+				$this->equalTo( 'sent' ),
+				$this->anything(),
+				$this->stringContains( basename( $missing ) )
+			);
+
+		$this->mailer->send(
+			null,
+			[
+				'to'          => 'recipient@example.com',
+				'subject'     => 'Indexed Missing Attachment',
+				'message'     => 'Hi',
+				'headers'     => [],
+				'attachments' => [ $missing ],
+			]
+		);
+	}
 }
