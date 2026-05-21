@@ -12,6 +12,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `docs/developer-handbook.md` is the authoritative reference for every public hook (filters, actions, dynamic actions) and their firing order. Update it whenever you add, remove, or change a hook.
 
+`docs/superpowers/specs/` and `docs/superpowers/plans/` hold dated design specs and implementation plans for in-flight features. Check them for context before touching related code, but treat the shipped code as authoritative if it has diverged.
+
 ## Commands
 
 ```bash
