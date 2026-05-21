@@ -39,6 +39,21 @@ class Settings_Page {
 	private const CAPABILITY = 'manage_options';
 
 	/**
+	 * Format of an AWS Access Key ID — 20 characters, "AKIA" prefix.
+	 *
+	 * Temporary "ASIA" (STS) keys are intentionally excluded: they require
+	 * an X-Amz-Security-Token the SES signer does not send, so they cannot
+	 * authenticate against SES through this plugin.
+	 */
+	private const ACCESS_KEY_PATTERN = '/^AKIA[A-Z0-9]{16}$/';
+
+	/**
+	 * Format of an AWS Secret Access Key — exactly 40 base64-alphabet
+	 * characters. The `#` delimiter avoids escaping the `/` in the class.
+	 */
+	private const SECRET_KEY_PATTERN = '#^[A-Za-z0-9/+]{40}$#';
+
+	/**
 	 * Display labels for the admin region select. Keys MUST be a superset
 	 * of {@see Client::ALLOWED_REGIONS}; the runtime allow-list lives there.
 	 */
@@ -296,19 +311,37 @@ class Settings_Page {
 
 		$sanitized = [];
 
-		// Encrypt credentials. Only update if a new value was provided.
+		// Encrypt credentials. Only update when a new, correctly-formatted
+		// value is provided; a blank field leaves the stored secret as-is,
+		// and a malformed value is rejected so a typo is never stored.
 		$access_key = sanitize_text_field( $input['access_key'] ?? '' );
-		if ( '' !== $access_key ) {
+		if ( '' === $access_key ) {
+			$sanitized['access_key'] = $current['access_key'] ?? '';
+		} elseif ( 1 === preg_match( self::ACCESS_KEY_PATTERN, $access_key ) ) {
 			$sanitized['access_key'] = $this->encryptor->encrypt( $access_key );
 		} else {
 			$sanitized['access_key'] = $current['access_key'] ?? '';
+			add_settings_error(
+				self::OPTION_NAME,
+				'invalid_access_key',
+				__( 'The AWS Access Key ID looks wrong — it should be 20 characters beginning with "AKIA". The previous value was kept.', 'leastudios-mailer' ),
+				'error'
+			);
 		}
 
 		$secret_key = sanitize_text_field( $input['secret_key'] ?? '' );
-		if ( '' !== $secret_key ) {
+		if ( '' === $secret_key ) {
+			$sanitized['secret_key'] = $current['secret_key'] ?? '';
+		} elseif ( 1 === preg_match( self::SECRET_KEY_PATTERN, $secret_key ) ) {
 			$sanitized['secret_key'] = $this->encryptor->encrypt( $secret_key );
 		} else {
 			$sanitized['secret_key'] = $current['secret_key'] ?? '';
+			add_settings_error(
+				self::OPTION_NAME,
+				'invalid_secret_key',
+				__( 'The AWS Secret Access Key looks wrong — it should be 40 characters long. The previous value was kept.', 'leastudios-mailer' ),
+				'error'
+			);
 		}
 
 		$region = sanitize_text_field( $input['region'] ?? 'us-east-1' );
