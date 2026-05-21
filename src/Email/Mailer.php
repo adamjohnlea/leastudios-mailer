@@ -313,6 +313,9 @@ class Mailer {
 
 		$names = [];
 
+		// A non-numeric string key is the caller's display name (keyed
+		// wp_mail() form); a numeric key is just a positional index from the
+		// legacy indexed form, so fall back to the file's base name there.
 		foreach ( $skipped as $key => $value ) {
 			if ( is_string( $key ) && '' !== $key && ! ctype_digit( $key ) ) {
 				$names[] = $key;

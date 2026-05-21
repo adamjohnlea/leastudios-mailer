@@ -486,4 +486,4 @@ wp_mail( $to, $subject, $body, $headers, [ '/abs/path/report.pdf' ] );
 wp_mail( $to, $subject, $body, $headers, [ 'Quarterly Report.pdf' => '/abs/path/report.pdf' ] );
 ```
 
-Files that do not exist or are not readable at send time are dropped silently from SES delivery and reported via the `leastudios_mailer_attachments_skipped` action so you can alert on them. The remaining valid files are still sent.
+Files that do not exist or are not readable at send time are dropped from SES delivery, recorded in the Email Log's error column, and reported via the `leastudios_mailer_attachments_skipped` action so you can alert on them. The remaining valid files are still sent.
