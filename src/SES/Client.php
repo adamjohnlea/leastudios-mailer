@@ -171,6 +171,30 @@ class Client {
 			];
 		}
 
+		/**
+		 * Filter the maximum size, in bytes, of a message sent through SES.
+		 *
+		 * Applies to attachment-bearing emails only. A message larger than
+		 * this is not sent — it is failed and logged. Defaults to SES's
+		 * documented 40 MB limit. Return 0 or less to disable the check.
+		 *
+		 * @param int $max_bytes Default 40 * MB_IN_BYTES (40 MB).
+		 */
+		$max_bytes = (int) apply_filters( 'leastudios_mailer_max_message_bytes', 40 * MB_IN_BYTES );
+
+		if ( $max_bytes > 0 && strlen( $raw_message ) > $max_bytes ) {
+			return [
+				'success'    => false,
+				'message_id' => null,
+				'error'      => sprintf(
+					/* translators: 1: actual message size, 2: configured size limit. */
+					__( 'Message size (%1$s) exceeds the %2$s limit; not sent to SES.', 'leastudios-mailer' ),
+					(string) size_format( strlen( $raw_message ) ),
+					(string) size_format( $max_bytes )
+				),
+			];
+		}
+
 		$body_array = $this->build_raw_request_body( $from_email, $to, $cc, $bcc, $reply_to, $raw_message );
 
 		/**

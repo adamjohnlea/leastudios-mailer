@@ -164,4 +164,63 @@ class ClientTest extends TestCase {
 		$this->assertFalse( $result['verified'] );
 		$this->assertIsString( $result['error'] );
 	}
+
+	/**
+	 * Stub the SES v2 SendEmail (outbound-emails) endpoint with a 200 response,
+	 * so a send that reaches the API does not make real network traffic.
+	 */
+	private function stub_send_endpoint(): void {
+		add_filter(
+			'pre_http_request',
+			static function ( $preempt, $args, $url ) {
+				if ( ! str_contains( (string) $url, '/v2/email/outbound-emails' ) ) {
+					return $preempt;
+				}
+
+				return [
+					'response' => [ 'code' => 200 ],
+					'body'     => (string) wp_json_encode( [ 'MessageId' => 'within-limit-msg' ] ),
+				];
+			},
+			10,
+			3
+		);
+	}
+
+	public function test_send_raw_email_over_the_size_limit_is_not_sent(): void {
+		$this->stub_send_endpoint();
+
+		// A 10-byte cap is smaller than any real MIME message.
+		add_filter( 'leastudios_mailer_max_message_bytes', static fn(): int => 10 );
+
+		$result = $this->client->send_raw_email(
+			'sender@example.com',
+			'Sender',
+			[ 'recipient@example.com' ],
+			'Subject',
+			'',
+			'Body text'
+		);
+
+		$this->assertFalse( $result['success'] );
+		$this->assertNull( $result['message_id'] );
+		$this->assertStringContainsString( 'exceeds', (string) $result['error'] );
+	}
+
+	public function test_send_raw_email_within_the_size_limit_dispatches_to_ses(): void {
+		$this->stub_send_endpoint();
+
+		// No size filter — the default 40 MB cap is far above a tiny message.
+		$result = $this->client->send_raw_email(
+			'sender@example.com',
+			'Sender',
+			[ 'recipient@example.com' ],
+			'Subject',
+			'',
+			'Body text'
+		);
+
+		$this->assertTrue( $result['success'] );
+		$this->assertSame( 'within-limit-msg', $result['message_id'] );
+	}
 }
