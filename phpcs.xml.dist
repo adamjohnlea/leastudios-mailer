@@ -11,7 +11,7 @@
     <exclude-pattern>assets/js/*.js</exclude-pattern>
     <exclude-pattern>assets/css/*.css</exclude-pattern>
 
-    <config name="testVersion" value="8.1-"/>
+    <config name="testVersion" value="8.2-"/>
     <config name="minimum_supported_wp_version" value="6.4"/>
 
     <rule ref="WordPress">
