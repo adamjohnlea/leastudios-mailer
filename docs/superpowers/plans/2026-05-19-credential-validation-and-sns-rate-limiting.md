@@ -29,7 +29,7 @@
 - Create: `tests/Settings_PageTest.php`
 - Modify: `src/Admin/Settings_Page.php` (add constants after line 39; rewrite credential branches at lines 299–312)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/Settings_PageTest.php` with exactly this content:
 
@@ -154,12 +154,12 @@ class Settings_PageTest extends TestCase {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `vendor/bin/phpunit --filter Settings_PageTest`
 Expected: FAIL. `test_malformed_access_key_is_rejected_and_keeps_current` and `test_malformed_secret_key_is_rejected_and_keeps_current` fail — current `sanitize_options()` has no format check, so it encrypts and stores the malformed value and raises no settings error. (`test_valid_*` and `test_blank_*` already pass against current code.)
 
-- [ ] **Step 3: Add the pattern constants**
+- [x] **Step 3: Add the pattern constants**
 
 In `src/Admin/Settings_Page.php`, immediately after the `CAPABILITY` constant (line 39), add:
 
@@ -180,7 +180,7 @@ In `src/Admin/Settings_Page.php`, immediately after the `CAPABILITY` constant (l
 	private const SECRET_KEY_PATTERN = '#^[A-Za-z0-9/+]{40}$#';
 ```
 
-- [ ] **Step 4: Rewrite the credential branches of `sanitize_options()`**
+- [x] **Step 4: Rewrite the credential branches of `sanitize_options()`**
 
 In `src/Admin/Settings_Page.php`, replace this block (currently lines 299–312):
 
@@ -238,19 +238,19 @@ with:
 		}
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `vendor/bin/phpunit --filter Settings_PageTest`
 Expected: PASS (4 tests).
 
-- [ ] **Step 6: Run the full suite and lint**
+- [x] **Step 6: Run the full suite and lint**
 
 Run: `composer test`
 Expected: PASS (70 tests — 66 existing + 4 new).
 Run: `composer lint`
 Expected: PHPCS clean, PHPStan `[OK] No errors`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/Admin/Settings_Page.php tests/Settings_PageTest.php
@@ -278,7 +278,7 @@ EOF
 - Modify: `tests/SNS_ControllerTest.php` (update `tear_down()` at lines 55–58; add two tests after `test_subscription_confirmation_string_to_sign`, i.e. after line 165)
 - Modify: `src/Webhook/SNS_Controller.php` (rewrite `verify_request()` at lines 64–84; add `is_rate_limited()` helper)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/SNS_ControllerTest.php`, replace the existing `tear_down()` method:
 
@@ -335,12 +335,12 @@ Then, immediately after the `test_subscription_confirmation_string_to_sign()` me
 	}
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `vendor/bin/phpunit --filter SNS_ControllerTest`
 Expected: FAIL. `test_requests_over_the_rate_limit_return_429` fails — with no rate limiting, the third request proceeds to signature verification and returns `true`, so `assertWPError()` fails. (`test_requests_under_the_rate_limit_pass` already passes against current code.)
 
-- [ ] **Step 3: Add the rate-limit guard to `verify_request()`**
+- [x] **Step 3: Add the rate-limit guard to `verify_request()`**
 
 In `src/Webhook/SNS_Controller.php`, replace the opening of `verify_request()` — this block:
 
@@ -364,7 +364,7 @@ with:
 		$body = $request->get_json_params();
 ```
 
-- [ ] **Step 4: Add the `is_rate_limited()` helper**
+- [x] **Step 4: Add the `is_rate_limited()` helper**
 
 In `src/Webhook/SNS_Controller.php`, immediately after the closing `}` of `verify_request()` and before `handle_notification()`, add:
 
@@ -416,19 +416,19 @@ In `src/Webhook/SNS_Controller.php`, immediately after the closing `}` of `verif
 	}
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `vendor/bin/phpunit --filter SNS_ControllerTest`
 Expected: PASS (13 tests — 11 existing + 2 new).
 
-- [ ] **Step 6: Run the full suite and lint**
+- [x] **Step 6: Run the full suite and lint**
 
 Run: `composer test`
 Expected: PASS (72 tests).
 Run: `composer lint`
 Expected: PHPCS clean, PHPStan `[OK] No errors`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/Webhook/SNS_Controller.php tests/SNS_ControllerTest.php
@@ -458,7 +458,7 @@ EOF
 **Files:**
 - Modify: `docs/developer-handbook.md`
 
-- [ ] **Step 1: Add the two filter entries**
+- [x] **Step 1: Add the two filter entries**
 
 In `docs/developer-handbook.md`, find the end of the `leastudios_mailer_sns_future_skew_seconds` entry — its example block ends with:
 
@@ -513,7 +513,7 @@ add_filter( 'leastudios_mailer_sns_rate_window_seconds', function ( int $window_
 ---
 ````
 
-- [ ] **Step 2: Update the SNS note in Hook Execution Order**
+- [x] **Step 2: Update the SNS note in Hook Execution Order**
 
 In `docs/developer-handbook.md`, in the "Hook Execution Order" section, replace this paragraph:
 
@@ -527,7 +527,7 @@ with:
 The SNS webhook filters — **`leastudios_mailer_sns_rate_limit`**, **`leastudios_mailer_sns_rate_window_seconds`**, **`leastudios_mailer_sns_max_age_seconds`**, and **`leastudios_mailer_sns_future_skew_seconds`** — are not part of this sequence. They fire only on the inbound delivery-tracking webhook (`leastudios-mailer/v1`) when Amazon SNS posts a bounce/complaint/delivery notification, independently of any `wp_mail()` call.
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/developer-handbook.md
@@ -551,7 +551,7 @@ EOF
 **Files:**
 - Modify: `../leastudios-dev-tools/CODE_REVIEW.md` — **a separate git repository.** The commit in this task runs in `leastudios-dev-tools`, not `leastudios-mailer`.
 
-- [ ] **Step 1: Append a resolution note**
+- [x] **Step 1: Append a resolution note**
 
 In `../leastudios-dev-tools/CODE_REVIEW.md`, in the `## Plugin: leastudios-mailer` section, find this line:
 
@@ -569,7 +569,7 @@ Immediately after it, add a blank line and:
 3. Resolved — `Settings_Page::sanitize_options()` validates AWS Access Key ID / Secret Access Key format and rejects malformed values with an admin error notice.
 ```
 
-- [ ] **Step 2: Commit (in the leastudios-dev-tools repository)**
+- [x] **Step 2: Commit (in the leastudios-dev-tools repository)**
 
 ```bash
 cd ../leastudios-dev-tools

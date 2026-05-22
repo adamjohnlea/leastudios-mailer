@@ -28,7 +28,7 @@
 - Modify: `tests/ClientTest.php` (add a helper and two tests before the final closing brace)
 - Modify: `src/SES/Client.php` (`send_raw_email()`, inside the body)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/ClientTest.php`, find the last method — `test_unverified_when_domain_exists_but_is_not_verified_for_sending()` — which ends with:
 
@@ -107,12 +107,12 @@ Replace that closing `}` of the method **and** the final class `}` with the meth
 }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `vendor/bin/phpunit --filter ClientTest`
 Expected: FAIL. `test_send_raw_email_over_the_size_limit_is_not_sent` fails — with no size check, `send_raw_email()` dispatches to the stubbed endpoint, gets a 200, and returns `success => true`, so `assertFalse()` fails. (`test_send_raw_email_within_the_size_limit_dispatches_to_ses` and the five existing tests already pass.)
 
-- [ ] **Step 3: Add the size check to `send_raw_email()`**
+- [x] **Step 3: Add the size check to `send_raw_email()`**
 
 In `src/SES/Client.php`, find this block inside `send_raw_email()`:
 
@@ -166,19 +166,19 @@ Replace it with:
 		$body_array = $this->build_raw_request_body( $from_email, $to, $cc, $bcc, $reply_to, $raw_message );
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `vendor/bin/phpunit --filter ClientTest`
 Expected: PASS (7 tests — 5 existing + 2 new).
 
-- [ ] **Step 5: Run the full suite and lint**
+- [x] **Step 5: Run the full suite and lint**
 
 Run: `composer test`
 Expected: PASS (79 tests — 77 existing + 2 new).
 Run: `composer lint`
 Expected: PHPCS clean, PHPStan `[OK] No errors`. If PHPCS reports auto-fixable docblock-alignment issues, run `composer phpcbf` and re-run `composer lint`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/SES/Client.php tests/ClientTest.php
@@ -205,7 +205,7 @@ EOF
 - Modify: `tests/MailerTest.php` (add one test before the final closing brace)
 - Modify: `src/Email/Mailer.php` (`send()`, `normalize_attachments()`, and two new private helpers)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `tests/MailerTest.php`, find the last method — `test_send_handles_array_to_recipients()` — which ends with:
 
@@ -282,12 +282,12 @@ Replace the method's closing `}` and the final class `}` with the method brace, 
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `vendor/bin/phpunit --filter MailerTest`
 Expected: FAIL. `test_skipped_attachment_is_recorded_in_the_email_log` fails — with the current code, `send()` passes `$ses_result['error']` (an empty string on success) as the log's `error_message`, so the `stringContains( 'missing.pdf' )` constraint on the 5th argument is not met. (The 13 existing tests still pass.)
 
-- [ ] **Step 3: Change `normalize_attachments()` to also return the skipped entries**
+- [x] **Step 3: Change `normalize_attachments()` to also return the skipped entries**
 
 In `src/Email/Mailer.php`, in the `normalize_attachments()` docblock, replace this line:
 
@@ -345,7 +345,7 @@ with:
 	}
 ```
 
-- [ ] **Step 4: Add the two private helper methods**
+- [x] **Step 4: Add the two private helper methods**
 
 In `src/Email/Mailer.php`, immediately after the closing `}` of `normalize_attachments()` and before the `/**` docblock of `parse_headers()`, add:
 
@@ -415,7 +415,7 @@ In `src/Email/Mailer.php`, immediately after the closing `}` of `normalize_attac
 	}
 ```
 
-- [ ] **Step 5: Capture the skipped list in `send()`**
+- [x] **Step 5: Capture the skipped list in `send()`**
 
 In `src/Email/Mailer.php`, in the `send()` method, replace this block:
 
@@ -433,7 +433,7 @@ with:
 		$skipped         = $normalized['skipped'];
 ```
 
-- [ ] **Step 6: Fold the skipped note into the logged error**
+- [x] **Step 6: Fold the skipped note into the logged error**
 
 In `src/Email/Mailer.php`, still in `send()`, replace this block:
 
@@ -461,19 +461,19 @@ with:
 		);
 ```
 
-- [ ] **Step 7: Run the test to verify it passes**
+- [x] **Step 7: Run the test to verify it passes**
 
 Run: `vendor/bin/phpunit --filter MailerTest`
 Expected: PASS (14 tests — 13 existing + 1 new).
 
-- [ ] **Step 8: Run the full suite and lint**
+- [x] **Step 8: Run the full suite and lint**
 
 Run: `composer test`
 Expected: PASS (80 tests).
 Run: `composer lint`
 Expected: PHPCS clean, PHPStan `[OK] No errors`. If PHPCS reports auto-fixable issues, run `composer phpcbf` and re-run `composer lint`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/Email/Mailer.php tests/MailerTest.php
@@ -499,7 +499,7 @@ EOF
 **Files:**
 - Modify: `docs/developer-handbook.md`
 
-- [ ] **Step 1: Add the filter entry**
+- [x] **Step 1: Add the filter entry**
 
 In `docs/developer-handbook.md`, find the end of the `leastudios_mailer_ses_raw_request_body` entry — its example block followed by a `---` and then `#### `leastudios_mailer_ses_max_attempts``:
 
@@ -550,7 +550,7 @@ add_filter( 'leastudios_mailer_max_message_bytes', function ( int $max_bytes ): 
 #### `leastudios_mailer_ses_max_attempts`
 ````
 
-- [ ] **Step 2: Note the filter in the Hook Execution Order**
+- [x] **Step 2: Note the filter in the Hook Execution Order**
 
 In `docs/developer-handbook.md`, in the "Hook Execution Order" section, replace item 5:
 
@@ -564,7 +564,7 @@ with:
 5. **`leastudios_mailer_ses_request_body`** *(no-attachment send)* or **`leastudios_mailer_ses_raw_request_body`** *(attachment send)* — Modify the SES API payload. On the attachment send, **`leastudios_mailer_max_message_bytes`** is also read at this stage to enforce the SES message-size limit before the payload is dispatched.
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/developer-handbook.md
