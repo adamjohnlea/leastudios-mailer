@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Resolve slug, tag, and version
         id: meta
@@ -91,6 +93,26 @@ jobs:
           (cd build && zip -qr "../$ZIP" "$SLUG")
           echo "path=$ZIP" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve release notes from annotated tag
+        id: notes
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          NOTES_FILE="$(mktemp)"
+          # Tag annotation message (subject + body). For lightweight tags this is empty.
+          git tag -l --format='%(contents)' "$TAG" > "$NOTES_FILE"
+          # Strip PGP signature block if present.
+          sed -i '/-----BEGIN PGP SIGNATURE-----/,/-----END PGP SIGNATURE-----/d' "$NOTES_FILE"
+          # Trim trailing whitespace.
+          sed -i -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}' "$NOTES_FILE"
+          if [ ! -s "$NOTES_FILE" ]; then
+            echo "::error::Tag $TAG has no annotation message. Re-create it with: git tag -a $TAG -m \"<release notes>\""
+            exit 1
+          fi
+          echo "file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+          echo "::group::Release notes preview"
+          cat "$NOTES_FILE"
+          echo "::endgroup::"
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -98,4 +120,4 @@ jobs:
           gh release create "${{ steps.meta.outputs.tag }}" \
             "${{ steps.zip.outputs.path }}" \
             --title "${{ steps.meta.outputs.tag }}" \
-            --generate-notes
+            --notes-file "${{ steps.notes.outputs.file }}"
