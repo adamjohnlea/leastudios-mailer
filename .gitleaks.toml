@@ -1,0 +1,19 @@
+# Gitleaks configuration for the leaStudios plugin suite.
+# Extends the default ruleset and adds allowlist entries for known
+# non-secret patterns (test stubs, vendor code, third-party fixtures).
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test stubs, fixtures, and third-party code that contain intentional non-secret tokens"
+paths = [
+  '''vendor/''',
+  '''node_modules/''',
+  '''tests/Fixtures/''',
+  '''tests/fixtures/''',
+]
+regexes = [
+  # Test-only WP auth keys / salts explicitly marked as such
+  '''do-not-use-in-prod''',
+]
