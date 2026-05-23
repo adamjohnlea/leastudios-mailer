@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Resolve slug, tag, and version
+        id: meta
+        run: |
+          SLUG="${GITHUB_REPOSITORY##*/}"
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "slug=$SLUG" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag matches plugin header Version
+        run: |
+          MAIN="${{ steps.meta.outputs.slug }}.php"
+          if [ ! -f "$MAIN" ]; then
+            echo "::error::Main plugin file '$MAIN' not found at repo root."
+            exit 1
+          fi
+          HEADER_VERSION=$(grep -E '^[[:space:]]*\*[[:space:]]*Version:' "$MAIN" | head -1 | sed -E 's/.*Version:[[:space:]]*//;s/[[:space:]]+$//')
+          if [ "$HEADER_VERSION" != "${{ steps.meta.outputs.version }}" ]; then
+            echo "::error::Tag version (${{ steps.meta.outputs.version }}) does not match plugin header Version ($HEADER_VERSION). Bump the header in $MAIN before tagging."
+            exit 1
+          fi
+          echo "Plugin header Version $HEADER_VERSION matches tag ${{ steps.meta.outputs.tag }}."
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: Install Composer production dependencies
+        run: composer install --no-dev --optimize-autoloader --no-interaction --no-progress
+
+      - name: Stage plugin files
+        run: |
+          SLUG="${{ steps.meta.outputs.slug }}"
+          mkdir -p "build/$SLUG"
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitignore' \
+            --exclude='.gitattributes' \
+            --exclude='.claude' \
+            --exclude='CLAUDE.md' \
+            --exclude='README.md' \
+            --exclude='Makefile' \
+            --exclude='tests' \
+            --exclude='docs' \
+            --exclude='node_modules' \
+            --exclude='dist' \
+            --exclude='build' \
+            --exclude='composer.json' \
+            --exclude='composer.lock' \
+            --exclude='package.json' \
+            --exclude='package-lock.json' \
+            --exclude='eslint.config.js' \
+            --exclude='phpcs.xml*' \
+            --exclude='phpstan*' \
+            --exclude='phpunit.xml*' \
+            --exclude='*-plan.md' \
+            --exclude='.DS_Store' \
+            ./ "build/$SLUG/"
+
+      - name: Create zip
+        id: zip
+        run: |
+          SLUG="${{ steps.meta.outputs.slug }}"
+          VERSION="${{ steps.meta.outputs.version }}"
+          ZIP="$SLUG-$VERSION.zip"
+          (cd build && zip -qr "../$ZIP" "$SLUG")
+          echo "path=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.meta.outputs.tag }}" \
+            "${{ steps.zip.outputs.path }}" \
+            --title "${{ steps.meta.outputs.tag }}" \
+            --generate-notes
