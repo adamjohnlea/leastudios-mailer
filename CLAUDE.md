@@ -62,3 +62,26 @@ The email pipeline is hook-driven end to end: `should_intercept` → `pre_send` 
 - **`Security/Nonce.php`, `Encryption/Options_Encryptor.php`, `Shared/Datetime_Util.php` are shared-by-duplication** across suite plugins and must stay byte-identical. `../leastudios-dev-tools/bin/check-shared.sh` verifies this. Edit one → propagate to every copy.
 - **PHPStan runs with `treatPhpDocTypesAsCertain: false`** (see `phpstan.neon`). This is deliberate: `apply_filters()` is `mixed` at runtime, so the runtime defensive checks on filter return values (`false === $filtered`, `null === $args`) are real and must not be "simplified away" as dead code.
 - The mailer must **degrade gracefully** — any SES/config error falls back to the default WordPress transport rather than dropping the email.
+
+## Releases
+
+This plugin uses a tag-triggered release workflow (`.github/workflows/release.yml`) that auto-generates release notes from the commit log between the previous and current tag.
+
+**To cut a release:** bump the `Version:` header in the main plugin file, commit, then:
+
+```bash
+git tag vX.Y.Z && git push origin vX.Y.Z
+```
+
+The workflow verifies the tag matches the header, builds the zip with `composer install --no-dev`, and publishes the release.
+
+**Commit-prefix → release-notes section:**
+
+- `feat:` → `## Added`
+- `fix:` → `## Fixed`
+- `refactor:` → `## Changed`
+- `perf:` → `## Performance`
+
+**Hidden from release notes** (use these prefixes for changes you don't want surfaced): `ci:`, `chore:`, `docs:`, `test:`, `style:`, `build:`, `release:`.
+
+The subject text after the prefix becomes the bullet verbatim, with the first letter capitalized. To override auto-notes for a specific release, edit the body in the GitHub UI after publish.
