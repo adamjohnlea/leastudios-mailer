@@ -93,21 +93,87 @@ jobs:
           (cd build && zip -qr "../$ZIP" "$SLUG")
           echo "path=$ZIP" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve release notes from annotated tag
+      - name: Generate release notes from commit log
         id: notes
         run: |
+          set -e
           TAG="${{ steps.meta.outputs.tag }}"
+          VERSION="${{ steps.meta.outputs.version }}"
+          SLUG="${{ steps.meta.outputs.slug }}"
+          MAIN="${SLUG}.php"
           NOTES_FILE="$(mktemp)"
-          # Tag annotation message (subject + body). For lightweight tags this is empty.
-          git tag -l --format='%(contents)' "$TAG" > "$NOTES_FILE"
-          # Strip PGP signature block if present.
-          sed -i '/-----BEGIN PGP SIGNATURE-----/,/-----END PGP SIGNATURE-----/d' "$NOTES_FILE"
-          # Trim trailing whitespace.
-          sed -i -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}' "$NOTES_FILE"
-          if [ ! -s "$NOTES_FILE" ]; then
-            echo "::error::Tag $TAG has no annotation message. Re-create it with: git tag -a $TAG -m \"<release notes>\""
-            exit 1
+
+          PREV_TAG=$(git tag --list 'v*' --sort=-v:refname | grep -vx "$TAG" | head -1 || true)
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..${TAG}"
+            echo "Generating notes for ${RANGE}"
+          else
+            RANGE="$TAG"
+            echo "First release — using full commit history"
           fi
+
+          DESCRIPTION=$(sed -nE '/\* Description:/ { s/.*Description:[[:space:]]*//; s/[[:space:]]+$//; p; q; }' "$MAIN" || true)
+          REQ_WP=$(sed -nE '/\* Requires at least:/ { s/.*Requires at least:[[:space:]]*//; s/[[:space:]]+$//; p; q; }' "$MAIN" || true)
+          REQ_PHP=$(sed -nE '/\* Requires PHP:/ { s/.*Requires PHP:[[:space:]]*//; s/[[:space:]]+$//; p; q; }' "$MAIN" || true)
+          PLUGIN_NAME=$(sed -nE '/\* Plugin Name:/ { s/.*Plugin Name:[[:space:]]*//; s/[[:space:]]+$//; p; q; }' "$MAIN" || true)
+
+          declare -a feat_lines fix_lines refactor_lines perf_lines other_lines
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            case "$line" in
+              feat\(*\):*|feat:*)        feat_lines+=("${line#*: }") ;;
+              fix\(*\):*|fix:*)          fix_lines+=("${line#*: }") ;;
+              refactor\(*\):*|refactor:*) refactor_lines+=("${line#*: }") ;;
+              perf\(*\):*|perf:*)        perf_lines+=("${line#*: }") ;;
+              ci:*|ci\(*\):*|chore:*|chore\(*\):*|docs:*|docs\(*\):*|test:*|test\(*\):*|style:*|style\(*\):*|build:*|build\(*\):*|release:*) ;;
+              *)                          other_lines+=("$line") ;;
+            esac
+          done < <(git log "$RANGE" --no-merges --pretty=tformat:'%s')
+
+          emit() {
+            local title="$1"; shift
+            [ "$#" -eq 0 ] && return
+            {
+              echo "## $title"
+              echo
+              for l in "$@"; do
+                [ -z "$l" ] && continue
+                printf -- '- %s%s\n' "$(printf '%s' "${l:0:1}" | tr '[:lower:]' '[:upper:]')" "${l:1}"
+              done
+              echo
+            } >> "$NOTES_FILE"
+          }
+
+          {
+            if [ -z "$PREV_TAG" ]; then
+              echo "First public release of ${PLUGIN_NAME:-$SLUG}."
+              echo
+              [ -n "$DESCRIPTION" ] && { echo "$DESCRIPTION"; echo; }
+            fi
+          } >> "$NOTES_FILE"
+
+          [ "${#feat_lines[@]}" -gt 0 ] && emit "Added" "${feat_lines[@]}"
+          [ "${#fix_lines[@]}" -gt 0 ] && emit "Fixed" "${fix_lines[@]}"
+          [ "${#refactor_lines[@]}" -gt 0 ] && emit "Changed" "${refactor_lines[@]}"
+          [ "${#perf_lines[@]}" -gt 0 ] && emit "Performance" "${perf_lines[@]}"
+          [ "${#other_lines[@]}" -gt 0 ] && emit "Other" "${other_lines[@]}"
+          true
+
+          {
+            echo "## Requirements"
+            echo
+            [ -n "$REQ_WP" ] && echo "- WordPress ${REQ_WP}+"
+            [ -n "$REQ_PHP" ] && echo "- PHP ${REQ_PHP}+"
+            echo
+            echo "---"
+            echo
+            echo "**Download:** \`${SLUG}-${VERSION}.zip\` (attached below)."
+          } >> "$NOTES_FILE"
+
+          # Collapse any 3+ blank lines into 2.
+          awk 'BEGIN{b=0} /^$/{b++; if(b<3) print; next} {b=0; print}' "$NOTES_FILE" > "${NOTES_FILE}.tidy"
+          mv "${NOTES_FILE}.tidy" "$NOTES_FILE"
+
           echo "file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
           echo "::group::Release notes preview"
           cat "$NOTES_FILE"
