@@ -4,7 +4,7 @@ Tags: email, ses, amazon ses, smtp, email log
 Requires at least: 6.4
 Tested up to: 7.0
 Requires PHP: 8.2
-Stable tag: 1.2.2
+Stable tag: 1.2.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -51,6 +51,19 @@ The plugin returns null from the `pre_wp_mail` filter, which lets WordPress fall
 leaStudios Mailer replaces the email transport layer. It is not compatible with other SMTP or email transport plugins that also hook `pre_wp_mail`. It works alongside plugins that compose emails via `wp_mail()` (like contact form plugins).
 
 == Changelog ==
+
+= 1.2.3 — 2026-05-24 =
+
+* Changed: hardened SQL construction across the plugin for Plugin Check compliance — table-name interpolations converted to the `%i` placeholder (WordPress 6.2+).
+* Internal: new `composer lint:db` tripwire (shared across the suite) blocks variable interpolation in `$wpdb` query construction; Plugin Check is now run against the release zip in CI to catch regressions before tag.
+* Docs: developer handbook upgraded to canonical shape.
+
+= 1.2.2 =
+* Fix: derive `VERSION` constant from the plugin header so the runtime constant can never drift from the release-zip version.
+
+= 1.2.1 =
+* Fix: declare compatibility with WordPress 7.0.
+* Internal: tag-triggered release workflow with auto-generated notes; CI hardening (gitleaks secret scan, dependency bumps).
 
 = 1.2.0 =
 * Added a message-size check — an attachment-bearing email larger than Amazon SES's limit (40 MB by default, filterable via `leastudios_mailer_max_message_bytes`) now fails early with a clear error instead of being rejected opaquely by SES.
