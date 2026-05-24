@@ -93,3 +93,37 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  plugin-check:
+    name: Plugin Check (release build)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out leastudios-mailer
+        uses: actions/checkout@v5
+        with:
+          path: leastudios-mailer
+
+      - name: Check out leastudios-dev-tools
+        uses: actions/checkout@v5
+        with:
+          repository: adamjohnlea/leastudios-dev-tools
+          path: leastudios-dev-tools
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: Build the release zip (composer install --no-dev + .distignore)
+        run: bash leastudios-dev-tools/bin/package.sh leastudios-mailer
+
+      - name: Unzip the release into ./build/
+        run: |
+          mkdir -p build
+          unzip -q dist/leastudios-mailer-*.zip -d build/
+
+      - name: Run Plugin Check on the release build
+        uses: WordPress/plugin-check-action@v1
+        with:
+          build-dir: build/leastudios-mailer

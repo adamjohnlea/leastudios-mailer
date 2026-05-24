@@ -1,0 +1,7 @@
+# Files exempted from the DB-interpolation tripwire (bin/check-db-interpolation.sh).
+# Each line is a path relative to the plugin root.
+#
+# Every exemption MUST be paired with an inline rationale comment at the call site.
+# See ../leastudios-dev-tools/CLAUDE.md > Database for the underlying rule.
+
+# (no current exemptions — every $wpdb call in src/ uses %i.)

@@ -39,9 +39,11 @@
         "phpcs": "phpcs",
         "phpcbf": "phpcbf",
         "phpstan": "phpstan analyse --memory-limit=2G",
+        "lint:db": "bash bin/check-db-interpolation.sh",
         "lint": [
             "@phpcs",
-            "@phpstan"
+            "@phpstan",
+            "@lint:db"
         ],
         "test": "phpunit"
     }
