@@ -3,7 +3,7 @@
  * Plugin Name:       leaStudios Mailer
  * Plugin URI:        https://leastudios.com/plugins/leastudios-mailer
  * Description:       Lightweight Amazon SES email transport for WordPress. Routes all wp_mail() through SES with logging and delivery tracking.
- * Version:           1.2.0
+ * Version:           1.2.1
  * Requires at least: 6.4
  * Requires PHP:      8.2
  * Author:            leaStudios
