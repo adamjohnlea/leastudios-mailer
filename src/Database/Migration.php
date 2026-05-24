@@ -122,15 +122,15 @@ class Migration {
 	private function widen_log_columns( \wpdb $wpdb ): void {
 		$table_name = self::get_table_name();
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$wpdb->query( "ALTER TABLE {$table_name} MODIFY COLUMN to_email text NOT NULL" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i MODIFY COLUMN to_email text NOT NULL', $table_name ) );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$column_exists = $wpdb->get_results( "SHOW COLUMNS FROM {$table_name} LIKE 'from_email'" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$column_exists = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table_name, 'from_email' ) );
 
 		if ( empty( $column_exists ) ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$wpdb->query( "ALTER TABLE {$table_name} ADD COLUMN from_email varchar(255) NOT NULL DEFAULT '' AFTER to_email, ADD KEY from_email (from_email)" );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->query( $wpdb->prepare( "ALTER TABLE %i ADD COLUMN from_email varchar(255) NOT NULL DEFAULT '' AFTER to_email, ADD KEY from_email (from_email)", $table_name ) );
 		}
 	}
 
@@ -148,8 +148,8 @@ class Migration {
 	private function widen_subject_column( \wpdb $wpdb ): void {
 		$table_name = self::get_table_name();
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$wpdb->query( "ALTER TABLE {$table_name} MODIFY COLUMN subject text NOT NULL" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i MODIFY COLUMN subject text NOT NULL', $table_name ) );
 	}
 
 	/**
@@ -161,7 +161,7 @@ class Migration {
 		global $wpdb;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}leastudios_mailer_log" );
+		$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', self::get_table_name() ) );
 
 		delete_option( self::SCHEMA_VERSION_KEY );
 	}
