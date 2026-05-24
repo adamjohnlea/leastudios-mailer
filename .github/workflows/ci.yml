@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
@@ -49,12 +49,12 @@ jobs:
           --health-retries=10
     steps:
       - name: Check out leastudios-mailer
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: leastudios-mailer
 
       - name: Check out leastudios-dev-tools
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: adamjohnlea/leastudios-dev-tools
           path: leastudios-dev-tools
@@ -85,7 +85,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
