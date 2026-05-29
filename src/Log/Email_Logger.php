@@ -129,6 +129,44 @@ class Email_Logger {
 	}
 
 	/**
+	 * Look up the delivery status of a single sent message by its SES message ID.
+	 *
+	 * This is the canonical, public read path into the mailer log for sibling
+	 * plugins (e.g. leastudios-forms) that recorded the message ID returned by
+	 * the `leastudios_mailer_email_sent` action and later want to surface the
+	 * delivery outcome. It reads only the mailer's own table.
+	 *
+	 * @param string $message_id The SES message ID captured at send time.
+	 * @return array{status: string, error_message: string}|null The status row, or null when the message ID is unknown.
+	 */
+	public function get_status_by_message_id( string $message_id ): ?array {
+		if ( '' === $message_id ) {
+			return null;
+		}
+
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				'SELECT status, error_message FROM %i WHERE message_id = %s ORDER BY id DESC LIMIT 1',
+				Migration::get_table_name(),
+				$message_id
+			),
+			ARRAY_A
+		);
+
+		if ( ! is_array( $row ) ) {
+			return null;
+		}
+
+		return [
+			'status'        => (string) ( $row['status'] ?? '' ),
+			'error_message' => (string) ( $row['error_message'] ?? '' ),
+		];
+	}
+
+	/**
 	 * Get paginated log entries.
 	 *
 	 * @param int         $page     Page number (1-indexed).

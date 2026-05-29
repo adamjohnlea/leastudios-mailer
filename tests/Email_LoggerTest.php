@@ -177,6 +177,36 @@ class Email_LoggerTest extends TestCase {
 		$this->assertSame( $fresh_id, (int) $rows[0]->id );
 	}
 
+	public function test_get_status_by_message_id_returns_status_row(): void {
+		$this->logger->log( 'to@example.com', 'S', 'sent', 'ses-lookup-1', null, 'from@example.com' );
+		$this->logger->update_status( 'ses-lookup-1', 'delivered' );
+
+		$result = $this->logger->get_status_by_message_id( 'ses-lookup-1' );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'delivered', $result['status'] );
+		$this->assertSame( '', $result['error_message'] );
+	}
+
+	public function test_get_status_by_message_id_includes_error_message(): void {
+		$this->logger->log( 'to@example.com', 'S', 'sent', 'ses-lookup-bounce', null, 'from@example.com' );
+		$this->logger->update_status( 'ses-lookup-bounce', 'bounced', 'Bounce type: Permanent' );
+
+		$result = $this->logger->get_status_by_message_id( 'ses-lookup-bounce' );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'bounced', $result['status'] );
+		$this->assertSame( 'Bounce type: Permanent', $result['error_message'] );
+	}
+
+	public function test_get_status_by_message_id_returns_null_for_unknown_id(): void {
+		$this->assertNull( $this->logger->get_status_by_message_id( 'ses-does-not-exist' ) );
+	}
+
+	public function test_get_status_by_message_id_returns_null_for_empty_id(): void {
+		$this->assertNull( $this->logger->get_status_by_message_id( '' ) );
+	}
+
 	public function test_before_log_filter_can_block_insert(): void {
 		add_filter( 'leastudios_mailer_before_log', '__return_false' );
 

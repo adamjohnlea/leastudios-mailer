@@ -57,6 +57,21 @@ final class Plugin {
 		$sns_controller = new SNS_Controller( $logger );
 		add_action( 'rest_api_init', [ $sns_controller, 'register_routes' ] );
 
+		// Public delivery-status lookup for sibling plugins. This is the only
+		// supported cross-plugin read path into the mailer log: a consumer
+		// passes the SES message ID it captured from `leastudios_mailer_email_sent`
+		// and gets back the current status row (or the unchanged default).
+		add_filter(
+			'leastudios_mailer_delivery_status',
+			static function ( $status, string $message_id ) use ( $logger ) {
+				$result = $logger->get_status_by_message_id( $message_id );
+
+				return null === $result ? $status : $result;
+			},
+			10,
+			2
+		);
+
 		// Admin settings page.
 		if ( is_admin() ) {
 			$settings = new Settings_Page( $encryptor, $logger, $health_check );

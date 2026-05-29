@@ -452,6 +452,41 @@ add_action( 'leastudios_mailer_email_sent', function ( array $result, array $att
 
 ---
 
+#### `leastudios_mailer_delivery_status`
+
+- **Type:** Filter
+- **Location:** `src/Plugin.php` (answered by `src/Log/Email_Logger.php`)
+- **Since:** 1.3.0
+- **Description:** The supported, public read path into the mailer log for sibling plugins
+  and integrations. Pass the SES message ID captured from `leastudios_mailer_email_sent`
+  (default value `null`) and the mailer returns the current delivery-status row for that
+  message, or the unchanged default when the message ID is unknown. This is the **only**
+  intended way for other plugins to read delivery status — they must not query the
+  `{prefix}leastudios_mailer_log` table directly. Internally the mailer answers this filter
+  via `Email_Logger::get_status_by_message_id()`.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `$status` | `array{status: string, error_message: string}\|null` | The default to return when the message ID is unknown. Callers pass `null`. |
+| `$message_id` | `string` | The SES message ID to look up. |
+
+**Returns:** `array{status: string, error_message: string}|null` — The status row when the
+message ID is found in the log, otherwise the passed-through default.
+
+**Example:**
+```php
+// From a sibling plugin that recorded the message ID at send time.
+$result = apply_filters( 'leastudios_mailer_delivery_status', null, $message_id );
+
+if ( is_array( $result ) ) {
+    printf( 'Delivery status: %s', esc_html( $result['status'] ) );
+}
+```
+
+---
+
 ### SES Request Hooks
 
 These hooks fire inside `SES/Client.php` when the mailer is constructing or sending the
