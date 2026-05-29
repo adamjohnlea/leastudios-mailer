@@ -5,6 +5,7 @@
 /tests
 .distignore
 .gitignore
+AGENTS.md
 CLAUDE.md
 composer.json
 composer.lock
