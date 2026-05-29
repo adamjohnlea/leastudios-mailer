@@ -4,7 +4,7 @@ Tags: email, ses, amazon ses, smtp, email log
 Requires at least: 6.4
 Tested up to: 7.0
 Requires PHP: 8.2
-Stable tag: 1.2.3
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -51,6 +51,10 @@ The plugin returns null from the `pre_wp_mail` filter, which lets WordPress fall
 leaStudios Mailer replaces the email transport layer. It is not compatible with other SMTP or email transport plugins that also hook `pre_wp_mail`. It works alongside plugins that compose emails via `wp_mail()` (like contact form plugins).
 
 == Changelog ==
+
+= 1.3.0 — 2026-05-29 =
+
+* Added: public `leastudios_mailer_delivery_status` filter — sibling plugins can look up a sent message's delivery status by SES message ID (the value returned from `leastudios_mailer_email_sent`) without querying the mailer log table directly. Backed by the new `Email_Logger::get_status_by_message_id()` method, which reads only this plugin's own table.
 
 = 1.2.3 — 2026-05-24 =
 
